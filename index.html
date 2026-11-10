@@ -1,0 +1,1920 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#0B0B10">
+<meta name="description" content="LinkCall — random video chat. One HTML file, no server, no accounts. Media is peer-to-peer and encrypted.">
+<meta name="robots" content="noindex">
+<title>LinkCall — random video chat</title>
+<style>
+  :root {
+    --bg: #0B0B10;
+    --surface: #15151F;
+    --surface-2: #1E1E2A;
+    --border: #2A2A3A;
+    --text: #F5F5FA;
+    --muted: #8B8BA0;
+    --primary: #FFD400;
+    --primary-ink: #0B0B10;
+    --danger: #FF4D6D;
+    --success: #3DDC97;
+    --male: #4C8DFF;
+    --female: #FF6FB5;
+    --r-sm: 8px;
+    --r-md: 14px;
+    --r-lg: 22px;
+    --r-pill: 999px;
+    --pad: 20px;
+    --safe-t: env(safe-area-inset-top, 0px);
+    --safe-b: env(safe-area-inset-bottom, 0px);
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    overscroll-behavior: none;
+  }
+
+  body {
+    height: 100dvh;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; }
+  input, textarea { font: inherit; color: inherit; }
+  a { color: var(--primary); }
+
+  /* ---------- screens ---------- */
+  .screen {
+    position: fixed;
+    inset: 0;
+    display: none;
+    flex-direction: column;
+    background: var(--bg);
+  }
+  .screen.active { display: flex; }
+
+  .scroll {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: calc(var(--safe-t) + 24px) var(--pad) calc(var(--safe-b) + 24px);
+  }
+
+  /* ---------- shared bits ---------- */
+  .brand {
+    font-size: 38px;
+    font-weight: 800;
+    letter-spacing: -1px;
+    color: var(--primary);
+    margin: 0;
+    line-height: 1.1;
+  }
+  .tagline { color: var(--muted); font-size: 14px; line-height: 1.5; margin: 8px 0 0; }
+
+  .label {
+    display: block;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .label.spaced { margin-top: 18px; }
+
+  .input {
+    width: 100%;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: 14px 16px;
+    font-size: 16px;
+    color: var(--text);
+    outline: none;
+    transition: border-color .15s;
+  }
+  .input:focus { border-color: var(--primary); }
+  .input::placeholder { color: var(--muted); }
+
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 11px 8px;
+    border-radius: var(--r-pill);
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    transition: .15s;
+  }
+  .chip[aria-pressed="true"] { border-color: var(--primary); color: var(--primary); }
+  .chip[data-g="male"][aria-pressed="true"] { border-color: var(--male); color: var(--male); }
+  .chip[data-g="female"][aria-pressed="true"] { border-color: var(--female); color: var(--female); }
+
+  .btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 16px;
+    border-radius: var(--r-pill);
+    font-size: 16px;
+    font-weight: 800;
+    transition: transform .1s, opacity .15s, background .15s;
+  }
+  .btn:active { transform: scale(.985); }
+  .btn[disabled] { opacity: .5; pointer-events: none; }
+  .btn-primary { background: var(--primary); color: var(--primary-ink); }
+  .btn-ghost { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
+  .btn-danger { background: var(--danger); color: #fff; }
+  .btn-sm { padding: 12px 18px; font-size: 14px; width: auto; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: 20px;
+  }
+
+  .hint { color: var(--muted); font-size: 11px; line-height: 1.45; margin: 8px 0 0; }
+  .error { color: var(--danger); font-size: 13px; line-height: 1.45; margin: 12px 0 0; }
+  .hidden { display: none !important; }
+
+  /* ---------- onboarding ---------- */
+  #onboard .scroll { justify-content: center; }
+  #onboard .card { max-width: 460px; width: 100%; margin: 0 auto; }
+  #onboard .intro { max-width: 460px; width: 100%; margin: 0 auto 20px; }
+
+  .avatar-row { display: flex; gap: 8px; }
+  .avatar-btn {
+    flex: 1;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    background: var(--surface-2);
+    font-size: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: .15s;
+  }
+  .avatar-btn[aria-pressed="true"] { border-color: var(--primary); background: #241F00; }
+
+  /* ---------- home ---------- */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: calc(var(--safe-t) + 16px) var(--pad) 0;
+  }
+  .who { min-width: 0; }
+  .who-name { font-size: 20px; font-weight: 800; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .status { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); margin: 3px 0 0; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.on { background: var(--success); box-shadow: 0 0 8px rgba(61,220,151,.7); }
+  .dot.wait { background: var(--primary); animation: pulse 1.2s infinite; }
+  .dot.off { background: var(--danger); }
+  @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .3 } }
+
+  .icon-btn {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex: none;
+  }
+
+  .stage-mid {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    padding: 0 var(--pad);
+    min-height: 0;
+  }
+
+  .orb {
+    width: 172px;
+    height: 172px;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 2px solid var(--primary);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-size: 19px;
+    font-weight: 800;
+    text-align: center;
+    line-height: 1.25;
+    transition: .2s;
+  }
+  .orb.searching { background: var(--primary); color: var(--primary-ink); animation: breathe 1.6s ease-in-out infinite; }
+  @keyframes breathe { 0%,100% { transform: scale(1) } 50% { transform: scale(1.04) } }
+  .orb small { font-size: 13px; font-weight: 700; opacity: .9; font-variant-numeric: tabular-nums; }
+
+  .spin {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 3px solid rgba(11,11,16,.25);
+    border-top-color: var(--primary-ink);
+    animation: rot .8s linear infinite;
+  }
+  @keyframes rot { to { transform: rotate(360deg) } }
+
+  .helper { color: var(--muted); font-size: 14px; text-align: center; margin: 0; line-height: 1.5; max-width: 320px; }
+
+  .bottom-pad { padding: 0 var(--pad) calc(var(--safe-b) + 18px); display: flex; flex-direction: column; gap: 12px; }
+
+  .notice {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 12px 14px;
+    border-radius: var(--r-md);
+    background: rgba(255,77,109,.08);
+    border: 1px solid rgba(255,77,109,.35);
+    color: #FFB3C1;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .notice.info { background: rgba(255,212,0,.07); border-color: rgba(255,212,0,.3); color: #FFE9A3; }
+
+  /* ---------- call ---------- */
+  #call { background: #000; }
+  .video-main {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    background: #000;
+  }
+  .remote-placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    background: radial-gradient(circle at 50% 40%, #1A1A28 0%, #0B0B10 70%);
+  }
+  .remote-initial {
+    width: 92px; height: 92px; border-radius: 50%;
+    background: var(--surface-2);
+    border: 2px solid var(--primary);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 38px; font-weight: 800; color: var(--primary);
+  }
+  .remote-name { font-size: 17px; font-weight: 700; }
+  .remote-sub { font-size: 13px; color: var(--muted); }
+
+  .call-top {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    padding: calc(var(--safe-t) + 12px) var(--pad) 12px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    background: linear-gradient(to bottom, rgba(0,0,0,.65), rgba(0,0,0,0));
+    pointer-events: none;
+  }
+  .call-top .peer { font-size: 17px; font-weight: 800; text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+  .call-top .timer { font-size: 12px; color: rgba(255,255,255,.85); margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .badge {
+    background: rgba(0,0,0,.5);
+    border: 1px solid rgba(255,255,255,.18);
+    border-radius: var(--r-pill);
+    padding: 6px 12px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .pip {
+    position: absolute;
+    right: 14px;
+    top: calc(var(--safe-t) + 66px);
+    width: 98px;
+    height: 140px;
+    border-radius: var(--r-md);
+    overflow: hidden;
+    border: 2px solid rgba(255,255,255,.4);
+    background: #111;
+    box-shadow: 0 6px 20px rgba(0,0,0,.45);
+    cursor: pointer;
+    z-index: 3;
+  }
+  .pip video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); display: block; }
+  .pip.mic-off::after,
+  .pip.cam-off::after {
+    content: "";
+    position: absolute; inset: 0;
+    background: rgba(0,0,0,.35);
+    box-shadow: inset 0 0 0 2px var(--danger);
+  }
+  .pip-tag {
+    position: absolute;
+    bottom: 6px; left: 0; right: 0;
+    text-align: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: #fff;
+    z-index: 4;
+    text-shadow: 0 1px 3px rgba(0,0,0,.9);
+  }
+
+  .call-bottom {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    padding: 16px var(--pad) calc(var(--safe-b) + 16px);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    background: linear-gradient(to top, rgba(0,0,0,.78), rgba(0,0,0,0));
+    z-index: 4;
+  }
+  .controls { display: flex; gap: 10px; justify-content: center; }
+  .ctrl {
+    flex: 1;
+    max-width: 92px;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: rgba(255,255,255,.16);
+    backdrop-filter: blur(6px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #fff;
+    transition: .15s;
+  }
+  .ctrl .ico { font-size: 19px; line-height: 1; }
+  .ctrl.off { background: rgba(255,255,255,.92); color: #000; }
+  .ctrl[disabled] { opacity: .35; pointer-events: none; }
+
+  .chat-panel {
+    position: absolute;
+    left: 12px; right: 12px;
+    bottom: calc(var(--safe-b) + 150px);
+    max-height: 42vh;
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    border-radius: var(--r-lg);
+    background: rgba(13,13,20,.92);
+    border: 1px solid var(--border);
+    backdrop-filter: blur(10px);
+    z-index: 5;
+  }
+  .chat-panel.open { display: flex; }
+  .chat-log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; min-height: 40px; }
+  .bubble {
+    max-width: 82%;
+    padding: 8px 12px;
+    border-radius: 14px;
+    font-size: 13px;
+    line-height: 1.4;
+    word-break: break-word;
+    background: var(--surface-2);
+    align-self: flex-start;
+    border-bottom-left-radius: 4px;
+  }
+  .bubble.mine { align-self: flex-end; background: var(--primary); color: var(--primary-ink); border-bottom-left-radius: 14px; border-bottom-right-radius: 4px; }
+  .chat-row { display: flex; gap: 8px; }
+  .chat-row .input { padding: 10px 12px; font-size: 14px; }
+  .chat-row button { flex: none; }
+
+  /* ---------- sheets ---------- */
+  .sheet-wrap {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: flex-end;
+    justify-content: center;
+    background: rgba(0,0,0,.6);
+    z-index: 50;
+  }
+  .sheet-wrap.open { display: flex; }
+  .sheet {
+    width: 100%;
+    max-width: 520px;
+    max-height: 88dvh;
+    overflow-y: auto;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-bottom: 0;
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+    padding: 18px var(--pad) calc(var(--safe-b) + 20px);
+    animation: up .2s ease-out;
+  }
+  @keyframes up { from { transform: translateY(18px); opacity: .6 } to { transform: none; opacity: 1 } }
+  .sheet-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .sheet-title { font-size: 18px; font-weight: 800; margin: 0; }
+  .sheet-body { display: flex; flex-direction: column; gap: 4px; }
+  .sheet-body .btn { margin-top: 18px; }
+
+  .kv { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; padding: 9px 0; border-bottom: 1px solid var(--border); }
+  .kv:last-of-type { border-bottom: 0; }
+  .kv span:first-child { color: var(--muted); flex: none; }
+  .kv span:last-child { text-align: right; word-break: break-all; }
+
+  /* ---------- toast ---------- */
+  #toast {
+    position: fixed;
+    left: 50%;
+    bottom: calc(var(--safe-b) + 24px);
+    transform: translate(-50%, 20px);
+    max-width: min(92vw, 420px);
+    padding: 12px 18px;
+    border-radius: var(--r-pill);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.4;
+    text-align: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: .22s;
+    z-index: 100;
+    box-shadow: 0 10px 30px rgba(0,0,0,.5);
+  }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+  #toast.bad { border-color: rgba(255,77,109,.5); color: #FFC2CD; }
+
+  @media (min-height: 720px) {
+    .orb { width: 190px; height: 190px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .orb.searching, .dot.wait, .spin { animation: none; }
+  }
+</style>
+</head>
+<body>
+<!-- ============ ONBOARDING ============ -->
+<section class="screen active" id="onboard">
+  <div class="scroll">
+    <div class="intro">
+      <h1 class="brand">LinkCall</h1>
+      <p class="tagline">Ek tap par random insaan se video baat. No signup, no app install — bas browser.</p>
+    </div>
+
+    <div class="card">
+      <label class="label" for="nick">Aapka naam</label>
+      <input id="nick" class="input" type="text" maxlength="24" placeholder="Guest" autocomplete="nickname" enterkeyhint="done">
+
+      <span class="label spaced">Avatar</span>
+      <div class="avatar-row" id="avatarRow" role="group" aria-label="Avatar">
+        <button class="avatar-btn" data-avatar="a1" aria-pressed="true" type="button" aria-label="Avatar 1">🙂</button>
+        <button class="avatar-btn" data-avatar="a2" aria-pressed="false" type="button" aria-label="Avatar 2">😎</button>
+        <button class="avatar-btn" data-avatar="a3" aria-pressed="false" type="button" aria-label="Avatar 3">🌸</button>
+        <button class="avatar-btn" data-avatar="a4" aria-pressed="false" type="button" aria-label="Avatar 4">🎧</button>
+      </div>
+
+      <span class="label spaced">Main kaun hoon</span>
+      <div class="chips" id="genderPick" role="group" aria-label="Gender">
+        <button class="chip" data-g="male" aria-pressed="false" type="button">Male</button>
+        <button class="chip" data-g="female" aria-pressed="false" type="button">Female</button>
+      </div>
+      <p class="hint">Optional. Gender se matchmaking filter kaam karta hai.</p>
+
+      <p class="error hidden" id="onboardError"></p>
+
+      <button class="btn btn-primary" id="startBtn" type="button" style="margin-top:20px">Shuru karein</button>
+    </div>
+
+    <p class="hint" style="text-align:center;max-width:460px;margin:16px auto 0">
+      Aage badhkar aap confirm karte hain ki aap <strong>18+</strong> hain aur doosron ka respect karenge.
+      Video/audio seedha peer-to-peer jata hai — server sirf match karwata hai.
+    </p>
+  </div>
+</section>
+
+<!-- ============ HOME ============ -->
+<section class="screen" id="home">
+  <div class="topbar">
+    <div class="who">
+      <h2 class="who-name" id="homeName">Guest</h2>
+      <p class="status"><span class="dot" id="netDot"></span><span id="netText">Connecting…</span></p>
+    </div>
+    <button class="icon-btn" id="settingsBtn" type="button" aria-label="Settings" title="Settings">⚙</button>
+  </div>
+
+  <div class="stage-mid">
+    <button class="orb" id="orb" type="button">
+      <span id="orbInner">Tap to<br>start</span>
+    </button>
+    <p class="helper" id="helper">Camera on karke random insaan se baat karein</p>
+  </div>
+
+  <div class="bottom-pad">
+    <div class="notice info hidden" id="homeNotice"></div>
+    <div>
+      <span class="label">Kisse baat karni hai?</span>
+      <div class="chips" id="filterChips" role="group" aria-label="Match filter">
+        <button class="chip" data-f="" aria-pressed="true" type="button">Koi bhi</button>
+        <button class="chip" data-f="female" aria-pressed="false" type="button">Female</button>
+        <button class="chip" data-f="male" aria-pressed="false" type="button">Male</button>
+      </div>
+    </div>
+    <button class="btn btn-primary" id="primaryBtn" type="button">Start call</button>
+  </div>
+</section>
+
+<!-- ============ CALL ============ -->
+<section class="screen" id="call">
+  <video id="remoteVideo" class="video-main hidden" autoplay playsinline></video>
+
+  <div class="remote-placeholder" id="remotePlaceholder">
+    <div class="remote-initial" id="remoteInitial">?</div>
+    <div class="remote-name" id="remoteName">Stranger</div>
+    <div class="remote-sub" id="remoteSub">
+      <span class="spin" style="border-color:rgba(255,212,0,.25);border-top-color:var(--primary);width:20px;height:20px;margin:0 auto"></span>
+    </div>
+  </div>
+
+  <div class="call-top">
+    <div>
+      <div class="peer" id="peerName">Stranger</div>
+      <div class="timer" id="callTimer">00:00</div>
+    </div>
+    <div class="badge" id="callBadge">Connecting</div>
+  </div>
+
+  <div class="pip" id="pip" role="button" tabindex="0" aria-label="Your camera">
+    <video id="localVideo" autoplay playsinline muted></video>
+    <div class="pip-tag" id="pipTag">You</div>
+  </div>
+
+  <div class="chat-panel" id="chatPanel">
+    <div class="chat-log" id="chatLog"></div>
+    <div class="chat-row">
+      <input class="input" id="chatInput" type="text" maxlength="300" placeholder="Message…" enterkeyhint="send">
+      <button class="btn btn-primary btn-sm" id="chatSend" type="button">Send</button>
+    </div>
+  </div>
+
+  <div class="call-bottom">
+    <div class="controls">
+      <button class="ctrl" id="micBtn" type="button"><span class="ico">🎤</span><span>Mute</span></button>
+      <button class="ctrl" id="camBtn" type="button"><span class="ico">📷</span><span>Cam</span></button>
+      <button class="ctrl" id="flipBtn" type="button"><span class="ico">🔄</span><span>Flip</span></button>
+      <button class="ctrl" id="chatBtn" type="button"><span class="ico">💬</span><span>Chat</span></button>
+    </div>
+    <button class="btn btn-danger" id="nextBtn" type="button">Next</button>
+    <button class="btn btn-ghost" id="endBtn" type="button">End call</button>
+  </div>
+</section>
+
+<!-- ============ ENDED ============ -->
+<section class="screen" id="ended">
+  <div class="scroll" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:12px">
+    <h2 style="font-size:26px;font-weight:800;margin:0">Call ended</h2>
+    <p style="color:var(--primary);font-size:20px;font-weight:700;margin:0" id="endedTime">00:00</p>
+    <p style="color:var(--muted);font-size:13px;margin:0;max-width:320px;line-height:1.5" id="endedReason">Call khatam.</p>
+    <div style="display:flex;gap:10px;margin-top:20px;width:100%;max-width:340px">
+      <button class="btn btn-ghost" id="endedHome" type="button">Home</button>
+      <button class="btn btn-primary" id="endedAgain" type="button">Next person</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SETTINGS SHEET ============ -->
+<div class="sheet-wrap" id="settingsSheet">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <div class="sheet-head">
+      <h3 class="sheet-title" id="settingsTitle">Settings</h3>
+      <button class="icon-btn" data-close-sheet type="button" aria-label="Close">✕</button>
+    </div>
+
+    <span class="label">Connection</span>
+    <div class="kv"><span>Status</span><span id="stStatus">—</span></div>
+    <div class="kv"><span>Signalling</span><span id="stBroker">—</span></div>
+    <div class="kv"><span>Room key</span><span id="stRoom">—</span></div>
+    <div class="kv"><span>You</span><span id="stId">—</span></div>
+    <div class="kv"><span>Partner</span><span id="stPeer">—</span></div>
+
+    <span class="label spaced">Privacy</span>
+    <div class="kv"><span>Video</span><span>P2P, DTLS-SRTP</span></div>
+    <div class="kv"><span>Signalling server</span><span>Public MQTT (no account)</span></div>
+    <div class="kv"><span>Saved data</span><span>Name, avatar, gender (local only)</span></div>
+
+    <button class="btn btn-ghost" id="changeRoomBtn" type="button">Change room group</button>
+    <button class="btn btn-ghost" id="clearDataBtn" type="button">Reset profile</button>
+
+    <p class="hint">
+      Room group ek "lobby" ki tarah hai. Sab log jo same group use kar rahe hain, ek doosre se match ho sakte hain —
+      is page ko share karne wale log default group par hote hain.
+    </p>
+  </div>
+</div>
+
+<!-- ============ ROOM SHEET ============ -->
+<div class="sheet-wrap" id="roomSheet">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="roomTitle">
+    <div class="sheet-head">
+      <h3 class="sheet-title" id="roomTitle">Room group</h3>
+      <button class="icon-btn" data-close-sheet type="button" aria-label="Close">✕</button>
+    </div>
+    <p class="hint" style="margin-top:0;margin-bottom:12px">
+      Same group wale log match ho sakte hain. Khaali chhodne par default group use hoga.
+    </p>
+    <input class="input" id="roomInput" type="text" maxlength="32" placeholder="default" autocomplete="off" spellcheck="false">
+    <button class="btn btn-primary" id="roomSave" type="button">Save &amp; reconnect</button>
+    <button class="btn btn-ghost" id="roomRandom" type="button">Random private group</button>
+  </div>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5.16.1/dist/mqtt.min.js" crossorigin="anonymous"></script>
+<script>
+/* LinkCall — single-file web app.
+ * Signalling: public MQTT broker over secure WebSocket (no backend needed).
+ * Media: direct WebRTC peer-to-peer, encrypted with DTLS-SRTP.
+ */
+'use strict';
+(function () {
+
+  /* ============================ EDIT HERE ============================
+   * Everything you may want to change lives in this one block.
+   *
+   *  BROKER  — signalling server. It only relays small JSON handshake
+   *            messages; video/audio never touch it. Must be a secure
+   *            WebSocket (wss://), otherwise HTTPS hosting will block it.
+   *  ROOM    — a "lobby". Only people using the same room can meet.
+   *  ICE     — add a TURN server here if you want calls to survive strict
+   *            mobile NATs. STUN alone works on most home Wi-Fi.
+   * =================================================================== */
+  var CONFIG = {
+    BROKER: 'wss://broker.emqx.io:8084/mqtt',
+    ROOM: 'default',
+    ICE: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' }
+      // ,{ urls: 'turn:your.turn.host:3478', username: 'user', credential: 'pass' }
+    ]
+  };
+
+  var DEFAULT_BROKER = CONFIG.BROKER;
+  var DEFAULT_ROOM = CONFIG.ROOM;
+  var STUN_DEFAULT = CONFIG.ICE;
+  var TOPIC_ROOT = 'linkcall/v1';
+  var PRESENCE_MS = 2500;      // how often we announce we are alive
+  var PRESENCE_TTL_MS = 8000;  // ignore peers we have not heard from
+  var INVITE_TIMEOUT_MS = 14000;
+  var ACCEPT_WAIT_MS = 15000;  // callee waiting for the actual offer
+  var DISCONNECT_GRACE_MS = 7000;
+  var RECENT_TTL_MS = 25000;   // do not instantly re-match the person we skipped
+
+  // ----------------------------------------------------------------- state
+  var state = {
+    me: null,                 // { id, nickname, avatar, gender }
+    room: DEFAULT_ROOM,
+    broker: DEFAULT_BROKER,
+    ice: [],
+    searchFilter: null,
+    searching: false,
+    presence: Object.create(null),
+    invited: Object.create(null),   // peerId -> timestamp
+    recent: Object.create(null),    // peerId -> timestamp (skipped people)
+    mqtt: null,
+    mqttReady: false,
+    call: null,
+    pendingInvite: null,      // { peerId, callId, partner }
+    earlyOffer: null,         // offer that arrived before its invite
+    earlyIce: [],             // ICE that arrived before the call existed
+    timers: { presence: null, invite: null, acceptWait: null }
+  };
+
+  // --------------------------------------------------------------- helpers
+  function $(id) { return document.getElementById(id); }
+
+  function uid() {
+    try {
+      if (window.crypto && crypto.randomUUID) return crypto.randomUUID().replace(/-/g, '');
+    } catch (e) { /* older browsers */ }
+    var out = '';
+    for (var i = 0; i < 24; i++) out += Math.floor(Math.random() * 16).toString(16);
+    return out;
+  }
+
+  function now() { return Date.now(); }
+
+  function fmtClock(totalSeconds) {
+    var safe = Math.max(0, Math.floor(totalSeconds || 0));
+    var m = String(Math.floor(safe / 60)).padStart(2, '0');
+    var s = String(safe % 60).padStart(2, '0');
+    return m + ':' + s;
+  }
+
+  function initialOf(name) {
+    var s = String(name || '?').trim();
+    return s ? s.charAt(0).toUpperCase() : '?';
+  }
+
+  var toastTimer = null;
+  function toast(message, bad) {
+    var el = $('toast');
+    if (!el) return;
+    el.textContent = message;
+    el.classList.toggle('bad', !!bad);
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.classList.remove('show'); }, bad ? 4200 : 2600);
+  }
+
+  function showScreen(name) {
+    ['onboard', 'home', 'call', 'ended'].forEach(function (id) {
+      var el = $(id);
+      if (el) el.classList.toggle('active', id === name);
+    });
+  }
+
+  function openSheet(id) {
+    var el = $(id);
+    if (el) el.classList.add('open');
+  }
+  function closeSheets() {
+    Array.prototype.forEach.call(document.querySelectorAll('.sheet-wrap'), function (el) {
+      el.classList.remove('open');
+    });
+  }
+
+  function setNotice(el, text) {
+    if (!el) return;
+    el.textContent = text || '';
+    el.classList.toggle('hidden', !text);
+  }
+
+  // --------------------------------------------------------------- storage
+  var STORE_KEY = 'linkcall.web.v1';
+
+  function loadStored() {
+    try {
+      var raw = localStorage.getItem(STORE_KEY);
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return null;
+      return parsed;
+    } catch (e) { return null; }
+  }
+
+  function saveStored() {
+    if (!state.me) return;
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify({
+        nickname: state.me.nickname,
+        avatar: state.me.avatar,
+        gender: state.me.gender,
+        room: state.room,
+        broker: state.broker,
+        ice: state.ice
+      }));
+    } catch (e) { /* private mode: profile just is not remembered */ }
+  }
+
+  function clearStored() {
+    try { localStorage.removeItem(STORE_KEY); } catch (e) { /* ignore */ }
+  }
+
+  // ------------------------------------------------------------- room/keys
+  function topicBase() {
+    var room = String(state.room || DEFAULT_ROOM).toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 32);
+    return TOPIC_ROOT + '/' + (room || DEFAULT_ROOM);
+  }
+  function topicPresence() { return topicBase() + '/presence'; }
+  function topicInbox(peerId) { return topicBase() + '/sig/' + peerId; }
+
+  // ------------------------------------------------------------- signalling
+  function publish(topic, payload, opts) {
+    if (!state.mqtt || !state.mqttReady) return false;
+    try {
+      state.mqtt.publish(topic, JSON.stringify(payload), Object.assign({ qos: 0, retain: false }, opts || {}));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function signalTo(peerId, payload) {
+    if (!peerId) return false;
+    return publish(topicInbox(peerId), payload);
+  }
+
+  function connectSignalling() {
+    var lib = window.mqtt;
+    if (!lib) {
+      setNet('off', 'Signalling library load nahi hui');
+      toast('Internet/CDN block hai — page reload karein', true);
+      return;
+    }
+
+    if (state.mqtt) {
+      try { state.mqtt.end(true); } catch (e) { /* already dead */ }
+      state.mqtt = null;
+    }
+    state.mqttReady = false;
+    setNet('wait', 'Connecting…');
+
+    var client;
+    try {
+      client = lib.connect(state.broker, {
+        clientId: 'lcw_' + state.me.id.slice(0, 18),
+        clean: true,
+        protocolVersion: 4,
+        keepalive: 30,
+        reconnectPeriod: 4000,
+        connectTimeout: 14000,
+        resubscribe: true
+      });
+    } catch (e) {
+      setNet('off', 'Signalling URL galat hai');
+      return;
+    }
+
+    state.mqtt = client;
+
+    client.on('connect', function () {
+      state.mqttReady = true;
+      setNet('on', 'Online');
+      client.subscribe([topicPresence(), topicInbox(state.me.id)], { qos: 0 }, function (err) {
+        if (err) {
+          setNet('off', 'Subscribe fail');
+          return;
+        }
+        // Announce ourselves so peers already waiting can see us at once.
+        announce();
+        if (state.searching) startSearchLoop();
+      });
+    });
+
+    client.on('reconnect', function () { setNet('wait', 'Reconnecting…'); });
+
+    client.on('close', function () {
+      state.mqttReady = false;
+      if (!state.call) setNet('wait', 'Offline — retry…');
+    });
+
+    client.on('error', function () {
+      state.mqttReady = false;
+      setNet('off', 'Signalling error — reload karein');
+    });
+
+    client.on('message', function (topic, buf) {
+      var msg;
+      try { msg = JSON.parse(buf.toString()); } catch (e) { return; }
+      if (!msg || typeof msg !== 'object') return;
+      if (topic === topicPresence()) handlePresence(msg);
+      else handleSignal(msg);
+    });
+  }
+
+  function setNet(kind, text) {
+    var dot = $('netDot');
+    var label = $('netText');
+    if (dot) dot.className = 'dot ' + (kind === 'on' ? 'on' : kind === 'wait' ? 'wait' : 'off');
+    if (label) label.textContent = text;
+  }
+
+  // ---- presence ---------------------------------------------------------
+  function announce() {
+    if (!state.me) return;
+    publish(topicPresence(), {
+      t: 'hello',
+      id: state.me.id,
+      name: state.me.nickname,
+      avatar: state.me.avatar,
+      gender: state.me.gender,
+      filter: state.searchFilter,
+      searching: !!state.searching,
+      at: now()
+    });
+  }
+
+  function handlePresence(msg) {
+    if (msg.id === state.me.id) return;
+
+    if (msg.t === 'bye') {
+      delete state.presence[msg.id];
+      return;
+    }
+    if (msg.t !== 'hello') return;
+    if (!msg.searching) {
+      // Not looking right now: drop any stale entry so we do not ring them.
+      delete state.presence[msg.id];
+      return;
+    }
+
+    state.presence[msg.id] = {
+      id: msg.id,
+      name: msg.name,
+      avatar: msg.avatar,
+      gender: msg.gender || null,
+      filter: msg.filter || null,
+      searching: true,
+      at: now()
+    };
+
+    if (state.searching) tryMatch();
+  }
+
+  function prunePresence() {
+    var limit = now() - PRESENCE_TTL_MS;
+    Object.keys(state.presence).forEach(function (id) {
+      if (state.presence[id].at < limit) delete state.presence[id];
+    });
+  }
+
+  function pruneRecent() {
+    var limit = now() - RECENT_TTL_MS;
+    Object.keys(state.recent).forEach(function (id) {
+      if (state.recent[id] < limit) delete state.recent[id];
+    });
+  }
+
+  /** Does this peer fit what I asked for, and do I fit what they asked for? */
+  function compatible(peer) {
+    if (state.recent[peer.id]) return false;
+    if (state.invited[peer.id]) return false;
+    if (!peer.searching) return false;
+
+    if (state.searchFilter && peer.gender && peer.gender !== state.searchFilter) return false;
+    if (peer.filter && state.me.gender && state.me.gender !== peer.filter) return false;
+    return true;
+  }
+
+  /** Only the peer with the bigger id opens the call, so invites never collide. */
+  function shouldInvite(peerId) {
+    return String(state.me.id) > String(peerId);
+  }
+
+  // -------------------------------------------------- matchmaking handshake
+  function startSearchLoop() {
+    if (state.timers.presence) clearInterval(state.timers.presence);
+    announce();
+    state.timers.presence = setInterval(function () {
+      prunePresence();
+      pruneRecent();
+      announce();
+      if (state.searching) tryMatch();
+    }, PRESENCE_MS);
+  }
+
+  function stopSearchLoop() {
+    if (state.timers.presence) clearInterval(state.timers.presence);
+    state.timers.presence = null;
+  }
+
+  function beginSearch() {
+    state.searching = true;
+    // Forget the previous handshake state, then tell the room we are free.
+    state.invited = Object.create(null);
+    state.pendingInvite = null;
+    state.earlyOffer = null;
+    state.earlyIce = [];
+    renderHome();
+    startSearchLoop();
+    tryMatch();
+  }
+
+  function cancelSearch(silent) {
+    state.searching = false;
+    stopSearchLoop();
+    clearTimeout(state.timers.invite);
+    state.timers.invite = null;
+    clearTimeout(state.timers.acceptWait);
+    state.timers.acceptWait = null;
+    Object.keys(state.invited).forEach(function (id) { delete state.invited[id]; });
+    announce();
+    renderHome();
+    if (!silent) toast('Search cancel');
+  }
+
+  function tryMatch() {
+    if (!state.searching || !state.mqttReady || state.call || state.pendingInvite) return;
+    if (state.timers.invite) return; // an invite is already in flight
+
+    prunePresence();
+    pruneRecent();
+
+    var candidates = Object.keys(state.presence)
+      .map(function (id) { return state.presence[id]; })
+      .filter(compatible)
+      .sort(function (a, b) { return a.at - b.at; }); // longest-waiting first
+
+    for (var i = 0; i < candidates.length; i++) {
+      var peer = candidates[i];
+      if (shouldInvite(peer.id)) {
+        sendInvite(peer);
+        return;
+      }
+    }
+  }
+
+  function sendInvite(peer) {
+    var callId = uid();
+    state.invited[peer.id] = now();
+    setOrbText('Ringing…');
+
+    publish(topicInbox(peer.id), {
+      t: 'invite', callId: callId, from: partnerCard(), at: now(), ice: state.ice
+    });
+
+    clearTimeout(state.timers.invite);
+    state.timers.invite = setTimeout(function () {
+      state.timers.invite = null;
+      delete state.invited[peer.id];
+      state.recent[peer.id] = now(); // do not hammer an unresponsive peer
+      if (!state.call && state.searching) tryMatch();
+    }, INVITE_TIMEOUT_MS);
+  }
+
+  function partnerCard() {
+    return {
+      id: state.me.id,
+      nickname: state.me.nickname,
+      avatar: state.me.avatar,
+      gender: state.me.gender
+    };
+  }
+
+  // ---- inbox router -----------------------------------------------------
+  function handleSignal(msg) {
+    if (msg.to && msg.to !== state.me.id) return;
+
+    switch (msg.t) {
+      case 'invite': onInvite(msg); break;
+      case 'accept': onAccept(msg); break;
+      case 'decline': onDecline(msg); break;
+      case 'offer': onOffer(msg); break;
+      case 'answer': onAnswer(msg); break;
+      case 'ice': onIce(msg); break;
+      case 'bye': onPeerBye(msg); break;
+      case 'chat': onChat(msg); break;
+      default: break;
+    }
+  }
+
+  function onInvite(msg) {
+    if (!msg.callId || !msg.from || msg.from.id === state.me.id) return;
+
+    // Already busy: politely refuse so the inviter can move on instantly.
+    if (state.call) {
+      declineInvite(msg, 'busy');
+      return;
+    }
+
+    clearTimeout(state.timers.invite);
+    state.timers.invite = null;
+    state.invited = Object.create(null);
+    state.searching = false;
+    stopSearchLoop();
+
+    state.pendingInvite = { peerId: msg.from.id, callId: msg.callId, partner: msg.from, ice: msg.ice };
+
+    // Answer straight away: on a random-chat page nobody wants a ring screen.
+    acceptInvite();
+  }
+
+  function declineInvite(msg, reason) {
+    publish(topicInbox(msg.from.id), {
+      t: 'decline', to: msg.from.id, callId: msg.callId, from: state.me.id, reason: reason || 'no'
+    });
+  }
+
+  function acceptInvite() {
+    var pending = state.pendingInvite;
+    if (!pending) return;
+    state.pendingInvite = null;
+
+    if (state.call) return;
+
+    var call = createCall({
+      callId: pending.callId,
+      peerId: pending.peerId,
+      partner: pending.partner,
+      role: 'callee',
+      ice: pending.ice
+    });
+    if (!call) return;
+
+    publish(topicInbox(pending.peerId), {
+      t: 'accept', to: pending.peerId, callId: call.callId, from: partnerCard()
+    });
+
+    // An offer that arrived before the invite was processed must not be lost.
+    if (state.earlyOffer && state.earlyOffer.callId === call.callId) {
+      call.pendingOffer = state.earlyOffer.sdp;
+      state.earlyOffer = null;
+    }
+
+    // Same story for ICE candidates that arrived before the call existed.
+    var leftover = [];
+    state.earlyIce.forEach(function (item) {
+      if (item.callId === call.callId) call.pendingIce.push(item.candidate);
+      else leftover.push(item);
+    });
+    state.earlyIce = leftover;
+
+    // Ask for media now; the offer may land before the camera is ready, and
+    // the queue in createCall keeps that safe.
+    startLocalMedia(true).catch(function (err) { failCall(call, err); });
+
+    clearTimeout(state.timers.acceptWait);
+    state.timers.acceptWait = setTimeout(function () {
+      if (state.call && state.call.callId === call.callId && !call.remoteSet) {
+        endCall('Partner se connect nahi ho paya', true);
+      }
+    }, ACCEPT_WAIT_MS);
+  }
+
+  function onAccept(msg) {
+    if (!msg.callId || !msg.from) return;
+    if (!state.invited[msg.from.id]) return; // stale accept
+
+    clearTimeout(state.timers.invite);
+    state.timers.invite = null;
+    delete state.invited[msg.from.id];
+    state.searching = false;
+    stopSearchLoop();
+
+    if (state.call) return;
+
+    var call = createCall({
+      callId: msg.callId,
+      peerId: msg.from.id,
+      partner: msg.from,
+      role: 'caller',
+      ice: null
+    });
+    if (!call) return;
+
+    startLocalMedia(true)
+      .then(function () { return createOffer(call); })
+      .catch(function (err) { failCall(call, err); });
+  }
+
+  function onDecline(msg) {
+    if (!msg.callId) return;
+    if (msg.from) {
+      state.recent[msg.from.id] = now();
+      delete state.invited[msg.from.id];
+    }
+    clearTimeout(state.timers.invite);
+    state.timers.invite = null;
+
+    if (state.call && state.call.callId === msg.callId) {
+      endCall('Partner ne decline kar diya', true);
+      return;
+    }
+    if (state.searching) {
+      setOrbText('Searching…');
+      setTimeout(tryMatch, 250);
+    }
+  }
+
+  // ----------------------------------------------------------- call engine
+  function createCall(opts) {
+    var pc;
+    try {
+      pc = new RTCPeerConnection({
+        iceServers: (opts.ice && opts.ice.length ? opts.ice : state.ice.length ? state.ice : STUN_DEFAULT),
+        iceCandidatePoolSize: 2,
+        bundlePolicy: 'max-bundle'
+      });
+    } catch (e) {
+      toast('Is browser mein WebRTC nahi chal raha', true);
+      setOrbText('Tap to\nstart');
+      state.searching = false;
+      renderHome();
+      return null;
+    }
+
+    var call = {
+      callId: opts.callId,
+      peerId: opts.peerId,
+      partner: opts.partner || { nickname: 'Stranger' },
+      role: opts.role,
+      pc: pc,
+      localStream: null,
+      remoteStream: null,
+      remoteSet: false,
+      offerSent: false,
+      pendingIce: [],
+      pendingOffer: null,
+      iceQueue: Promise.resolve(),
+      startedAt: now(),
+      connectedAt: 0,
+      ended: false,
+      micOn: true,
+      camOn: true,
+      facing: 'user',
+      disconnectTimer: null
+    };
+    state.call = call;
+
+    pc.onicecandidate = function (event) {
+      if (!event.candidate || !state.call || state.call.callId !== call.callId) return;
+      publish(topicInbox(call.peerId), {
+        t: 'ice', to: call.peerId, callId: call.callId, from: state.me.id,
+        candidate: event.candidate.toJSON ? event.candidate.toJSON() : event.candidate
+      });
+    };
+
+    pc.ontrack = function (event) {
+      if (state.call !== call) return;
+
+      var shared = event.streams && event.streams[0];
+      if (shared) {
+        if (shared !== call.remoteStream) {
+          call.remoteStream = shared;
+          attachRemote(shared);
+        }
+        return;
+      }
+
+      // Some browsers fire one track at a time with no stream attached; build
+      // one ourselves so audio and video stay in the same element.
+      if (!call.remoteStream) call.remoteStream = new MediaStream();
+      var exists = call.remoteStream.getTracks().some(function (t) { return t.id === event.track.id; });
+      if (!exists) call.remoteStream.addTrack(event.track);
+      attachRemote(call.remoteStream);
+    };
+
+    pc.onconnectionstatechange = function () {
+      if (state.call !== call) return;
+      var s = pc.connectionState;
+      if (s === 'connected') {
+        if (call.disconnectTimer) clearTimeout(call.disconnectTimer);
+        call.disconnectTimer = null;
+        if (!call.connectedAt) call.connectedAt = now();
+        clearTimeout(state.timers.acceptWait);
+        state.timers.acceptWait = null;
+        setBadge('Live');
+        renderCall();
+        return;
+      }
+      if (s === 'disconnected') {
+        if (call.disconnectTimer) return;
+        call.disconnectTimer = setTimeout(function () {
+          call.disconnectTimer = null;
+          if (state.call === call && pc.connectionState !== 'connected') {
+            endCall('Connection chali gayi', true);
+          }
+        }, DISCONNECT_GRACE_MS);
+        return;
+      }
+      if (s === 'failed') {
+        endCall('Connection fail ho gayi. Network badal kar try karein.', true);
+      }
+    };
+
+    showScreen('call');
+    renderCall();
+    setBadge(opts.role === 'caller' ? 'Calling' : 'Connecting');
+    setRemoteInfo(call.partner);
+
+    // Leaving the page mid-call must tell the partner.
+    window.addEventListener('beforeunload', onPageHide);
+    return call;
+  }
+
+  function startLocalMedia(withVideo) {
+    var call = state.call;
+    if (!call) return Promise.reject(new Error('no_call'));
+
+    var constraints = {
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      video: withVideo
+        ? { facingMode: call.facing, width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24 } }
+        : false
+    };
+
+    return navigator.mediaDevices.getUserMedia(constraints)
+      .catch(function () {
+        // No camera (or it is busy): fall back to audio-only so the call still works.
+        return navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      })
+      .then(function (stream) {
+        if (!state.call || state.call !== call) {
+          stream.getTracks().forEach(function (t) { t.stop(); });
+          throw new Error('call_gone');
+        }
+        call.localStream = stream;
+        stream.getTracks().forEach(function (track) { call.pc.addTrack(track, stream); });
+
+        var hasVideo = stream.getVideoTracks().length > 0;
+        call.camOn = hasVideo;
+        attachLocal(stream);
+        renderCall();
+
+        // If an offer arrived before the camera was ready, answer it now.
+        if (call.pendingOffer) {
+          var sdp = call.pendingOffer;
+          call.pendingOffer = null;
+          applyOffer(call, sdp).catch(function (err) { failCall(call, err); });
+        }
+        return stream;
+      });
+  }
+
+  function createOffer(call) {
+    return call.pc.createOffer()
+      .then(function (offer) { return call.pc.setLocalDescription(offer); })
+      .then(function () {
+        call.offerSent = true;
+        publish(topicInbox(call.peerId), {
+          t: 'offer', to: call.peerId, callId: call.callId, from: state.me.id,
+          sdp: call.pc.localDescription.sdp
+        });
+        setBadge('Connecting');
+      });
+  }
+
+  function onOffer(msg) {
+    if (!msg.sdp || !msg.callId) return;
+    var call = state.call;
+
+    if (!call || call.callId !== msg.callId) {
+      // Topic ordering is not guaranteed, so the offer can beat the invite.
+      // Park it; acceptInvite() picks it up once the call object exists.
+      state.earlyOffer = { callId: msg.callId, sdp: msg.sdp };
+      if (state.pendingInvite && state.pendingInvite.callId === msg.callId) acceptInvite();
+      return;
+    }
+    if (call.role !== 'callee') return;
+
+    if (!call.localStream) { call.pendingOffer = msg.sdp; return; }
+    applyOffer(call, msg.sdp).catch(function (err) { failCall(call, err); });
+  }
+
+  function applyOffer(call, sdp) {
+    return call.pc.setRemoteDescription({ type: 'offer', sdp: sdp })
+      .then(function () {
+        call.remoteSet = true;
+        return flushIce(call);
+      })
+      .then(function () { return call.pc.createAnswer(); })
+      .then(function (answer) { return call.pc.setLocalDescription(answer); })
+      .then(function () {
+        publish(topicInbox(call.peerId), {
+          t: 'answer', to: call.peerId, callId: call.callId, from: state.me.id,
+          sdp: call.pc.localDescription.sdp
+        });
+        setBadge('Connecting');
+      });
+  }
+
+  function onAnswer(msg) {
+    var call = state.call;
+    if (!call || call.callId !== msg.callId || !msg.sdp) return;
+    if (call.role !== 'caller' || call.remoteSet) return;
+
+    call.pc.setRemoteDescription({ type: 'answer', sdp: msg.sdp })
+      .then(function () {
+        call.remoteSet = true;
+        return flushIce(call);
+      })
+      .catch(function () { /* a late duplicate answer is harmless */ });
+  }
+
+  function onIce(msg) {
+    var call = state.call;
+    if (!msg.candidate) return;
+
+    if (!call || call.callId !== msg.callId) {
+      // Keep a bounded number of stragglers; the call may still be forming.
+      if (state.earlyIce.length < 40) state.earlyIce.push({ callId: msg.callId, candidate: msg.candidate });
+      return;
+    }
+
+    var candidate = msg.candidate;
+    // Serialise adds: the browser throws if a candidate lands before the
+    // remote description, and public-broker messages can arrive out of order.
+    call.iceQueue = call.iceQueue.then(function () {
+      if (!call.remoteSet) {
+        call.pendingIce.push(candidate);
+        return null;
+      }
+      return call.pc.addIceCandidate(candidate).catch(function () { /* stale candidate */ });
+    });
+  }
+
+  function flushIce(call) {
+    var queued = call.pendingIce.splice(0, call.pendingIce.length);
+    call.iceQueue = call.iceQueue.then(function () {
+      return queued.reduce(function (chain, candidate) {
+        return chain.then(function () {
+          return call.pc.addIceCandidate(candidate).catch(function () { /* stale */ });
+        });
+      }, Promise.resolve());
+    });
+    return call.iceQueue;
+  }
+
+  function attachLocal(stream) {
+    var video = $('localVideo');
+    if (!video) return;
+    video.srcObject = stream;
+    var hasVideo = stream.getVideoTracks().length > 0;
+    $('pip').classList.toggle('hidden', !hasVideo);
+    var playPromise = video.play();
+    if (playPromise && playPromise.catch) playPromise.catch(function () { /* autoplay guard */ });
+  }
+
+  function attachRemote(stream) {
+    var video = $('remoteVideo');
+    if (!video) return;
+    video.srcObject = stream;
+    // A track starts "muted" until the first frames arrive, so re-check when
+    // the browser tells us the picture is actually flowing.
+    stream.getVideoTracks().forEach(function (track) {
+      track.onunmute = function () { refreshRemoteVisibility(); };
+      track.onmute = function () { refreshRemoteVisibility(); };
+    });
+    refreshRemoteVisibility();
+    setRemoteInfo(state.call ? state.call.partner : null);
+    var playPromise = video.play();
+    if (playPromise && playPromise.catch) playPromise.catch(function () { /* needs a tap */ });
+  }
+
+  /** Show the video only when the partner is really sending a picture. */
+  function refreshRemoteVisibility() {
+    var video = $('remoteVideo');
+    var call = state.call;
+    if (!video) return;
+    var track = call && call.remoteStream ? call.remoteStream.getVideoTracks()[0] : null;
+    var live = !!(track && track.readyState === 'live' && !track.muted);
+    video.classList.toggle('hidden', !live);
+    $('remotePlaceholder').classList.toggle('hidden', live);
+    if (live) {
+      $('remoteSub').textContent = 'Connected';
+    }
+  }
+
+  function setRemoteInfo(partner) {
+    var name = (partner && partner.nickname) || 'Stranger';
+    $('remoteName').textContent = name;
+    $('remoteInitial').textContent = initialOf(name);
+    $('peerName').textContent = name;
+  }
+
+  function setBadge(text) {
+    var el = $('callBadge');
+    if (el) el.textContent = text;
+  }
+
+  function elapsedSeconds() {
+    var call = state.call;
+    var base = call && call.connectedAt ? call.connectedAt : (call ? call.startedAt : now());
+    if (!call) return 0;
+    var end = call.endedAt || now();
+    return Math.max(0, Math.round((end - base) / 1000));
+  }
+
+  function endCall(reason, remoteAlreadyGone) {
+    var call = state.call;
+    if (!call || call.ended) return;
+
+    if (!remoteAlreadyGone) {
+      publish(topicInbox(call.peerId), {
+        t: 'bye', to: call.peerId, callId: call.callId, from: state.me.id
+      });
+    }
+
+    call.ended = true;
+    call.endedAt = now();
+    var seconds = elapsedSeconds();
+
+    if (call.disconnectTimer) clearTimeout(call.disconnectTimer);
+    clearTimeout(state.timers.acceptWait);
+    state.timers.acceptWait = null;
+
+    try { call.pc.getSenders().forEach(function (s) { if (s.track) s.track.stop(); }); } catch (e) { /* ignore */ }
+    if (call.localStream) call.localStream.getTracks().forEach(function (t) { try { t.stop(); } catch (e) { /* ignore */ } });
+    try { call.pc.close(); } catch (e) { /* ignore */ }
+    try { call.pc.onicecandidate = null; call.pc.ontrack = null; call.pc.onconnectionstatechange = null; } catch (e) { /* ignore */ }
+
+    state.call = null;
+    state.pendingInvite = null;
+    if (call.peerId) state.recent[call.peerId] = now();
+
+    var rv = $('remoteVideo');
+    var lv = $('localVideo');
+    if (rv) { rv.srcObject = null; rv.classList.add('hidden'); }
+    if (lv) { lv.srcObject = null; }
+    $('remotePlaceholder').classList.remove('hidden');
+    $('pip').classList.remove('hidden', 'mic-off', 'cam-off');
+    $('chatLog').innerHTML = '';
+    $('chatPanel').classList.remove('open');
+
+    $('endedTime').textContent = fmtClock(seconds);
+    $('endedReason').textContent = reason || 'Call khatam.';
+    showScreen('ended');
+    renderHome();
+    window.removeEventListener('beforeunload', onPageHide);
+  }
+
+  function failCall(call, err) {
+    if (state.call !== call) return;
+    var message = 'Camera/mic permission nahi mili ya device busy hai.';
+    var name = String((err && err.name) || '');
+    if (name === 'NotAllowedError' || name === 'SecurityError') {
+      message = 'Camera/mic permission block hai. Browser settings se allow karein.';
+    } else if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+      message = 'Camera ya mic nahi mila.';
+    } else if (name === 'NotReadableError') {
+      message = 'Camera kisi doosre app ne le rakhi hai.';
+    }
+    endCall(message, false);
+  }
+
+  function onPeerBye(msg) {
+    var call = state.call;
+    if (!call || call.callId !== msg.callId) return;
+    endCall('Partner ne call end kar di', true);
+  }
+
+  function onPageHide() {
+    if (state.call) endCall('Page band ho gaya', false);
+  }
+
+  // ------------------------------------------------------------ text chat
+  function onChat(msg) {
+    if (!msg.text) return;
+    appendBubble(String(msg.text).slice(0, 300), false);
+    if (!state.call) return;
+    $('chatPanel').classList.add('open');
+  }
+
+  function appendBubble(text, mine) {
+    var log = $('chatLog');
+    if (!log) return;
+    var bubble = document.createElement('div');
+    bubble.className = 'bubble' + (mine ? ' mine' : '');
+    bubble.textContent = text;
+    log.appendChild(bubble);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function sendChat() {
+    var input = $('chatInput');
+    var text = (input.value || '').trim();
+    var call = state.call;
+    if (!text) return;
+    if (!call) { toast('Chat ke liye call chahiye'); return; }
+
+    publish(topicInbox(call.peerId), {
+      t: 'chat', to: call.peerId, callId: call.callId, from: state.me.id, text: text.slice(0, 300)
+    });
+    appendBubble(text.slice(0, 300), true);
+    input.value = '';
+  }
+
+  // --------------------------------------------------------------- renders
+  function setOrbText(text) {
+    var inner = $('orbInner');
+    if (inner) inner.innerHTML = text;
+  }
+
+  function renderHome() {
+    if (!state.me) return;
+    $('homeName').textContent = state.me.nickname;
+
+    var orb = $('orb');
+    var searching = state.searching;
+    orb.classList.toggle('searching', searching);
+    if (searching) {
+      orb.innerHTML = '<span class="spin"></span><small>Searching…</small>';
+    } else {
+      orb.innerHTML = '<span id="orbInner">Tap to<br>start</span>';
+    }
+
+    var primary = $('primaryBtn');
+    primary.textContent = searching ? 'Cancel search' : 'Start call';
+    primary.className = 'btn ' + (searching ? 'btn-ghost' : 'btn-primary');
+
+    $('helper').textContent = searching
+      ? 'Aapke liye kisi ko dhoond rahe hain…'
+      : 'Camera on karke random insaan se baat karein';
+
+    Array.prototype.forEach.call($('filterChips').children, function (chip) {
+      var value = chip.getAttribute('data-f') || null;
+      chip.setAttribute('aria-pressed', String(value === state.searchFilter));
+      chip.disabled = searching;
+    });
+  }
+
+  function renderCall() {
+    var call = state.call;
+    if (!call) return;
+    $('camBtn').classList.toggle('off', !call.camOn);
+    $('camBtn').querySelector('span:last-child').textContent = call.camOn ? 'Cam' : 'Cam off';
+    $('micBtn').classList.toggle('off', !call.micOn);
+    $('micBtn').querySelector('span:last-child').textContent = call.micOn ? 'Mute' : 'Unmute';
+    $('pip').classList.toggle('mic-off', !call.micOn);
+    $('pip').classList.toggle('cam-off', !call.camOn);
+    $('pipTag').textContent = call.camOn ? 'You' : 'Cam off';
+  }
+
+  function renderSettings() {
+    var connected = !!(state.mqtt && state.mqtt.connected);
+    $('stStatus').textContent = connected ? 'Connected' : 'Offline';
+    $('stBroker').textContent = state.broker.replace(/^wss?:\/\//, '');
+    $('stRoom').textContent = state.room;
+    $('stId').textContent = state.me ? state.me.id.slice(0, 10) + '…' : '—';
+    $('stPeer').textContent = state.call ? (state.call.partner.nickname || 'Stranger') : 'Not in call';
+  }
+
+  function syncSelfCard() {
+    $('nick').value = state.me ? state.me.nickname : '';
+    Array.prototype.forEach.call($('avatarRow').children, function (btn) {
+      btn.setAttribute('aria-pressed', String(!!state.me && btn.getAttribute('data-avatar') === state.me.avatar));
+    });
+    Array.prototype.forEach.call($('genderPick').children, function (btn) {
+      btn.setAttribute('aria-pressed', String(!!state.me && btn.getAttribute('data-g') === state.me.gender));
+    });
+  }
+
+  // ---------------------------------------------------------------- actions
+  function selectAvatar(avatar) {
+    if (!state.me) return;
+    state.me.avatar = avatar;
+    saveStored();
+    syncSelfCard();
+  }
+
+  function selectGender(gender) {
+    if (!state.me) return;
+    state.me.gender = state.me.gender === gender ? null : gender;
+    saveStored();
+    syncSelfCard();
+    announce();
+  }
+
+  function selectFilter(filter) {
+    state.searchFilter = filter || null;
+    renderHome();
+    announce();
+    if (state.searching) tryMatch();
+  }
+
+  function startFromOnboarding() {
+    var nick = ($('nick').value || '').trim().slice(0, 24) || 'Guest';
+    var avatar = 'a1';
+    var pressed = $('avatarRow').querySelector('[aria-pressed="true"]');
+    if (pressed) avatar = pressed.getAttribute('data-avatar');
+    var genderBtn = $('genderPick').querySelector('[aria-pressed="true"]');
+
+    state.me = {
+      id: state.me ? state.me.id : uid(),
+      nickname: nick,
+      avatar: avatar,
+      gender: genderBtn ? genderBtn.getAttribute('data-g') : null
+    };
+    saveStored();
+    $('onboardError').classList.add('hidden');
+
+    showScreen('home');
+    renderHome();
+    connectSignalling();
+  }
+
+  function onPrimary() {
+    if (state.searching) { cancelSearch(); return; }
+    if (!state.mqttReady) {
+      setNotice($('homeNotice'), 'Server se connect nahi ho paya. Internet check karein.');
+      connectSignalling();
+      return;
+    }
+    setNotice($('homeNotice'), '');
+    beginSearch();
+  }
+
+  function nextPerson() {
+    if (state.call) endCall('Aapne next dabaya', false);
+    showScreen('home');
+    renderHome();
+    if (!state.mqttReady) connectSignalling();
+    setTimeout(function () { if (!state.searching) beginSearch(); }, 220);
+  }
+
+  function toggleMic() {
+    var call = state.call;
+    if (!call || !call.localStream) return;
+    var audio = call.localStream.getAudioTracks()[0];
+    if (!audio) return;
+    audio.enabled = !audio.enabled;
+    call.micOn = audio.enabled;
+    renderCall();
+  }
+
+  function toggleCam() {
+    var call = state.call;
+    if (!call || !call.localStream) return;
+    var video = call.localStream.getVideoTracks()[0];
+    if (!video) return;
+    video.enabled = !video.enabled;
+    call.camOn = video.enabled;
+    renderCall();
+  }
+
+  function flipCamera() {
+    var call = state.call;
+    if (!call || !call.localStream) return;
+    var track = call.localStream.getVideoTracks()[0];
+    if (!track) return;
+
+    call.facing = call.facing === 'user' ? 'environment' : 'user';
+    track.applyConstraints({ facingMode: call.facing }).catch(function () {
+      // Desktop/single-camera devices simply cannot flip.
+      call.facing = call.facing === 'user' ? 'environment' : 'user';
+      toast('Is device par doosra camera nahi hai');
+    });
+  }
+
+  function changeRoom() {
+    var input = $('roomInput');
+    var value = (input.value || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 32);
+    state.room = value || DEFAULT_ROOM;
+    saveStored();
+    closeSheets();
+    toast('Room: ' + state.room);
+    if (state.call) endCall('Room badal gaya', false);
+    if (state.searching) cancelSearch(true);
+    state.presence = Object.create(null);
+    connectSignalling();
+    renderSettings();
+  }
+
+  function randomRoom() {
+    var code = uid().slice(0, 8);
+    $('roomInput').value = code;
+  }
+
+  function resetProfile() {
+    if (state.call) endCall('Profile reset', false);
+    state.searching = false;
+    stopSearchLoop();
+    clearStored();
+    state.me = null;
+    state.presence = Object.create(null);
+    state.recent = Object.create(null);
+    state.invited = Object.create(null);
+    closeSheets();
+    syncSelfCard();
+    showScreen('onboard');
+  }
+
+  // ------------------------------------------------------------------ boot
+  function bindEvents() {
+    $('startBtn').addEventListener('click', startFromOnboarding);
+    $('nick').addEventListener('keydown', function (e) { if (e.key === 'Enter') startFromOnboarding(); });
+
+    $('avatarRow').addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-avatar]');
+      if (btn) selectAvatar(btn.getAttribute('data-avatar'));
+    });
+
+    $('genderPick').addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-g]');
+      if (btn) selectGender(btn.getAttribute('data-g'));
+    });
+
+    $('filterChips').addEventListener('click', function (e) {
+      var chip = e.target.closest('[data-f]');
+      if (chip) selectFilter(chip.getAttribute('data-f'));
+    });
+
+    $('primaryBtn').addEventListener('click', onPrimary);
+    $('orb').addEventListener('click', onPrimary);
+
+    $('settingsBtn').addEventListener('click', function () {
+      renderSettings();
+      openSheet('settingsSheet');
+    });
+    $('changeRoomBtn').addEventListener('click', function () {
+      closeSheets();
+      $('roomInput').value = state.room === DEFAULT_ROOM ? '' : state.room;
+      openSheet('roomSheet');
+    });
+    $('clearDataBtn').addEventListener('click', resetProfile);
+    $('roomSave').addEventListener('click', changeRoom);
+    $('roomRandom').addEventListener('click', randomRoom);
+
+    Array.prototype.forEach.call(document.querySelectorAll('[data-close-sheet]'), function (btn) {
+      btn.addEventListener('click', closeSheets);
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.sheet-wrap'), function (wrap) {
+      wrap.addEventListener('click', function (e) { if (e.target === wrap) closeSheets(); });
+    });
+
+    $('endBtn').addEventListener('click', function () { endCall('Aapne call end ki', false); });
+    $('nextBtn').addEventListener('click', nextPerson);
+    $('micBtn').addEventListener('click', toggleMic);
+    $('camBtn').addEventListener('click', toggleCam);
+    $('flipBtn').addEventListener('click', flipCamera);
+    $('chatBtn').addEventListener('click', function () {
+      var panel = $('chatPanel');
+      panel.classList.toggle('open');
+      if (panel.classList.contains('open')) $('chatInput').focus();
+    });
+    $('chatSend').addEventListener('click', sendChat);
+    $('chatInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') sendChat(); });
+
+    $('pip').addEventListener('click', flipCamera);
+
+    $('endedHome').addEventListener('click', function () {
+      showScreen('home');
+      renderHome();
+    });
+    $('endedAgain').addEventListener('click', nextPerson);
+
+    // Ticking clock for the call screen.
+    setInterval(function () {
+      var call = state.call;
+      if (!call) return;
+      $('callTimer').textContent = fmtClock(elapsedSeconds());
+    }, 500);
+  }
+
+  function boot() {
+    bindEvents();
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.RTCPeerConnection) {
+      $('onboardError').textContent = 'Ye browser video call support nahi karta. Chrome ya Safari ka naya version use karein (HTTPS zaroori hai).';
+      $('onboardError').classList.remove('hidden');
+      $('startBtn').disabled = true;
+      return;
+    }
+
+    var stored = loadStored();
+    if (stored) {
+      state.room = stored.room || DEFAULT_ROOM;
+      state.broker = stored.broker || DEFAULT_BROKER;
+      state.ice = Array.isArray(stored.ice) ? stored.ice : [];
+      state.me = {
+        id: uid(),
+        nickname: stored.nickname || 'Guest',
+        avatar: stored.avatar || 'a1',
+        gender: stored.gender || null
+      };
+      syncSelfCard();
+      showScreen('home');
+      renderHome();
+      connectSignalling();
+    } else {
+      state.me = { id: uid(), nickname: 'Guest', avatar: 'a1', gender: null };
+      syncSelfCard();
+      showScreen('onboard');
+    }
+
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) {
+        state.searching = false;
+        stopSearchLoop();
+      } else if (state.me) {
+        announce();
+        renderHome();
+      }
+    });
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();
+
+</script>
+
+</body>
+</html>
