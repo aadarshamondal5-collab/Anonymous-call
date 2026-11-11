@@ -79,7 +79,7 @@ let triedApp = false;
 /* Vercel's env var UI keeps newlines as the two characters \ and n. Paste the
  * JSON exactly as downloaded and this normalisation makes it parse anyway. */
 function readServiceAccount() {
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
+  const raw = process.env.LC_FIREBASE_CRED_JSON_33;
   if (!raw || !String(raw).trim()) return null;
   try {
     return JSON.parse(String(raw).replace(/\\n/g, '\n'));
@@ -97,7 +97,7 @@ function getApp() {
 
   try {
     const options = { credential: admin.credential.cert(creds) };
-    const dbUrl = process.env.FIREBASE_DATABASE_URL;
+    const dbUrl = process.env.LC_FIREBASE_DB_LINK_11;
     if (dbUrl) options.databaseURL = dbUrl;
     cachedApp = admin.apps.length ? admin.app() : admin.initializeApp(options);
   } catch (e) {
@@ -211,18 +211,21 @@ function clientKey(req) {
 /* NOTHING IS HARDCODED HERE.
  *
  * The admin ID and password come ONLY from Vercel environment variables:
- *   ADMIN_ID            e.g. "lc_ops_7f3a"   (never the guessable "admin")
- *   ADMIN_PASSWORD      long random string   (min 12 chars, enforced below)
- *   ADMIN_TOKEN_SECRET  optional; if absent it is derived from ADMIN_PASSWORD
+ *   LC_BOSS_LOGIN_USER_12   admin username, e.g. "lc_ops_7f3a"
+ *                           (never the guessable "admin")
+ *   LC_BOSS_LOGIN_PASS_88   long random string (min 12 chars, enforced below)
+ *   LC_BOSS_TOKEN_KEY_55    optional; if absent it is derived from
+ *                           LC_BOSS_LOGIN_PASS_88
  *
- * If either ADMIN_ID or ADMIN_PASSWORD is missing, admin login is DISABLED.
- * That is intentional: the safe failure mode for an auth endpoint is "closed",
- * never "open with a guessable default". The route answers 503 and names the
- * missing variable so a misconfigured deploy is obvious instead of insecure. */
+ * If either LC_BOSS_LOGIN_USER_12 or LC_BOSS_LOGIN_PASS_88 is missing, admin
+ * login is DISABLED. That is intentional: the safe failure mode for an auth
+ * endpoint is "closed", never "open with a guessable default". The route
+ * answers 503 and names the missing variable so a misconfigured deploy is
+ * obvious instead of insecure. */
 
 function adminCredentials() {
-  const id = (process.env.ADMIN_ID || '').trim();
-  const password = process.env.ADMIN_PASSWORD || '';
+  const id = (process.env.LC_BOSS_LOGIN_USER_12 || '').trim();
+  const password = process.env.LC_BOSS_LOGIN_PASS_88 || '';
   if (!id || !password) return null;
   return { id: id, password: password };
 }
@@ -230,25 +233,25 @@ function adminCredentials() {
 /** Human-readable reason the panel cannot log in, or '' when it is configured. */
 function setupProblem() {
   const missing = [];
-  if (!(process.env.ADMIN_ID || '').trim()) missing.push('ADMIN_ID');
-  if (!(process.env.ADMIN_PASSWORD || '')) missing.push('ADMIN_PASSWORD');
+  if (!(process.env.LC_BOSS_LOGIN_USER_12 || '').trim()) missing.push('LC_BOSS_LOGIN_USER_12');
+  if (!(process.env.LC_BOSS_LOGIN_PASS_88 || '')) missing.push('LC_BOSS_LOGIN_PASS_88');
   if (missing.length) {
     return 'Admin login is disabled: set ' + missing.join(' and ') +
       ' in the Vercel environment variables.';
   }
-  if ((process.env.ADMIN_PASSWORD || '').length < MIN_PASSWORD_LEN) {
-    return 'ADMIN_PASSWORD must be at least ' + MIN_PASSWORD_LEN + ' characters long.';
+  if ((process.env.LC_BOSS_LOGIN_PASS_88 || '').length < MIN_PASSWORD_LEN) {
+    return 'LC_BOSS_LOGIN_PASS_88 must be at least ' + MIN_PASSWORD_LEN + ' characters long.';
   }
   return '';
 }
 
 function tokenSecret() {
-  /* ADMIN_TOKEN_SECRET is the right var. If the operator only set
-   * ADMIN_PASSWORD we derive a secret from it so tokens still work — rotating
+  /* LC_BOSS_TOKEN_KEY_55 is the right var. If the operator only set
+   * LC_BOSS_LOGIN_PASS_88 we derive a secret from it so tokens still work — rotating
    * the password then also invalidates every existing session, which is fine. */
-  const dedicated = process.env.ADMIN_TOKEN_SECRET;
+  const dedicated = process.env.LC_BOSS_TOKEN_KEY_55;
   if (dedicated && dedicated.length >= 8) return dedicated;
-  const pw = process.env.ADMIN_PASSWORD;
+  const pw = process.env.LC_BOSS_LOGIN_PASS_88;
   if (pw && pw.length >= MIN_PASSWORD_LEN) return 'linkcall::' + pw;
   return null;
 }
@@ -277,7 +280,7 @@ function sameString(a, b) {
  * The payload is a real JWT-ish claims blob (sub/iat/exp/iss) so the operator
  * can paste it into jwt.io and read it, but the signature is the same
  * HMAC-SHA256 scheme this project already used — no new dependency, no key
- * files, works on serverless, and rotation is just ADMIN_TOKEN_SECRET. */
+ * files, works on serverless, and rotation is just LC_BOSS_TOKEN_KEY_55. */
 function b64url(input) {
   return Buffer.from(String(input), 'utf8').toString('base64')
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -1014,8 +1017,8 @@ async function routeReport(req, res) {
  * it without a redeploy. Validation of the returned payment happens in
  * /api/webhook (successful_payment) — never trust the client's "I paid". */
 async function tgCall(method, payload) {
-  const token = process.env.BOT_TOKEN;
-  if (!token) return { ok: false, description: 'BOT_TOKEN missing' };
+  const token = process.env.LC_TG_BOT_KEY_99;
+  if (!token) return { ok: false, description: 'LC_TG_BOT_KEY_99 missing' };
   try {
     const r = await fetch('https://api.telegram.org/bot' + token + '/' + method, {
       method: 'POST',
@@ -1070,7 +1073,7 @@ async function routeCreateInvoice(req, res) {
   });
 
   if (!result || !result.ok || !result.result) {
-    return fail(res, 502, 'Could not create the invoice. Check BOT_TOKEN.');
+    return fail(res, 502, 'Could not create the invoice. Check LC_TG_BOT_KEY_99.');
   }
 
   send(res, 200, { ok: true, link: result.result, price: price });
@@ -1082,8 +1085,8 @@ async function routeCreateInvoice(req, res) {
  * Secret-Token), and handle pre_checkout_query / successful_payment so the
  * Stars payment actually grants the unlock.
  *
- * IMPORTANT: the bot token is read from BOT_TOKEN and never appears in the
- * client. The webhook URL must be registered with the same secret.
+ * IMPORTANT: the bot token is read from LC_TG_BOT_KEY_99 and never appears in
+ * the client. The webhook URL must be registered with the same secret.
  *
  * Telegram retries a failed webhook, so every branch answers 200 quickly. A
  * non-200 makes Telegram re-deliver and can double-grant the unlock. */
@@ -1094,9 +1097,9 @@ async function routeWebhook(req, res) {
    * `successful_payment` and grant themselves the paid unlock for free — the
    * update body is entirely attacker-controlled. A missing secret is a setup
    * error, so refuse to process anything instead of trusting the caller. */
-  const secret = process.env.WEBHOOK_SECRET;
+  const secret = process.env.LC_TG_WEBHOOK_PASS_44;
   if (!secret) {
-    return fail(res, 503, 'WEBHOOK_SECRET is not set — the webhook is disabled.');
+    return fail(res, 503, 'LC_TG_WEBHOOK_PASS_44 is not set — the webhook is disabled.');
   }
   const got = req.headers && req.headers['x-telegram-bot-api-secret-token'];
   if (!got || !sameString(String(got), secret)) {
@@ -1148,7 +1151,7 @@ async function routeWebhook(req, res) {
 
     /* --- /start: reply with the Mini App button ------------------------- */
     if (msg && msg.text && String(msg.text).indexOf('/start') === 0) {
-      const url = process.env.PUBLIC_URL || '';
+      const url = process.env.LC_WEB_DOMAIN_X7 || '';
       if (url) {
         await tgCall('sendMessage', {
           chat_id: msg.chat.id,
@@ -1172,8 +1175,8 @@ async function routeWebhook(req, res) {
 /* POST /api/admin/login  body: { id, password }
  *
  * The password is checked HERE, server-side, against Vercel env vars only.
- * There is no hardcoded fallback anywhere in this project — if ADMIN_ID or
- * ADMIN_PASSWORD is not set, this answers 503 and admin login is simply
+ * There is no hardcoded fallback anywhere in this project — if LC_BOSS_LOGIN_USER_12 or
+ * LC_BOSS_LOGIN_PASS_88 is not set, this answers 503 and admin login is simply
  * disabled. Closed is the safe failure mode for an auth endpoint. */
 async function routeAdminLogin(req, res) {
   if (!requirePost(req, res)) return;
@@ -1216,8 +1219,8 @@ async function routeAdminLogin(req, res) {
   const token = issueToken(expected.id);
   if (!token) {
     return fail(res, 500,
-      'Could not create a token — set ADMIN_PASSWORD (min ' + MIN_PASSWORD_LEN +
-      ' chars) and/or ADMIN_TOKEN_SECRET.');
+      'Could not create a token — set LC_BOSS_LOGIN_PASS_88 (min ' + MIN_PASSWORD_LEN +
+      ' chars) and/or LC_BOSS_TOKEN_KEY_55.');
   }
 
   await logAdmin('login', expected.id, 'source: env');
@@ -1298,7 +1301,7 @@ async function routeAdminStats(req, res) {
         priceStars: DEFAULT_CONFIG.priceStars,
         channelUrl: DEFAULT_CONFIG.channelUrl,
         serverTime: Date.now(),
-        error: 'Firebase is not configured (FIREBASE_SERVICE_ACCOUNT).'
+        error: 'Firebase is not configured (LC_FIREBASE_CRED_JSON_33).'
       });
     }
     fail(res, 500, 'Could not load stats.');
