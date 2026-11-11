@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#07060D">
-<meta name="description" content="LinkCall — Telegram bot mini app. Random audio chat, koi camera nahi. Awaaz peer-to-peer aur encrypted.">
+<meta name="description" content="LinkCall — random audio-only chat in your browser. Voice is peer-to-peer and encrypted. No camera, no signup.">
 <meta name="color-scheme" content="dark light">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -59,10 +59,15 @@
       var(--bg);
     background-attachment: fixed;
   }
-  /* Fine grain stops large gradients from banding on cheap phone displays. */
+  /* Fine grain stops large gradients from banding on cheap phone displays.
+     NOTE: no `mix-blend-mode` here on purpose. A blended, fixed, full-screen
+     pseudo-element puts the WHOLE document into one compositing group, and
+     Android WebView then renders mirrored/garbled glyphs inside scrollable
+     overlays (the chat log) on some GPUs. Plain opacity gives the same grain
+     with zero compositing side effects. */
   body::before {
     content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
-    opacity: .035; mix-blend-mode: overlay;
+    opacity: .03;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
   }
   button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; }
@@ -175,6 +180,7 @@
     border-radius: 1px;
   }
   .hint { color: var(--muted); font-size: 11px; line-height: 1.45; margin: 8px 0 0; }
+  .hint.bad { color: var(--danger); }
   .hint.legal-note { text-align: center; max-width: 460px; margin: 16px auto 0; }
   .hint.online-hint { margin: 0; }
   .error { color: var(--danger); font-size: 13px; line-height: 1.45; margin: 12px 0 0; }
@@ -285,6 +291,26 @@
   @keyframes rot { to { transform: rotate(360deg) } }
 
   .helper { color: var(--muted); font-size: 14px; text-align: center; margin: 0; line-height: 1.5; max-width: 320px; }
+
+  /* Gender filter paywall line, sits directly under the chips. */
+  .pay-note {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    flex-wrap: wrap; margin: 10px 0 0;
+    font-size: 12px; color: var(--muted); text-align: center;
+  }
+  .pay-link {
+    padding: 5px 12px; border-radius: var(--r-pill);
+    font-size: 11px; font-weight: 800; color: var(--primary-ink);
+    background: linear-gradient(180deg, #FFE04D 0%, var(--primary) 50%, var(--primary-2) 100%);
+    box-shadow: 0 3px 10px rgba(255, 170, 0, .38), var(--inset);
+    transition: transform .12s, box-shadow .15s;
+  }
+  .pay-link:active { transform: scale(.95); box-shadow: 0 2px 6px rgba(255, 170, 0, .34), var(--inset); }
+  .pay-link[disabled] { opacity: .5; pointer-events: none; }
+
+  .chip.locked { opacity: .45; }
+  .chip.locked::after { content: ' 🔒'; font-size: 10px; opacity: 1; }
+
   .bottom-pad {
     position: relative; z-index: 2;
     padding: 0 var(--pad) calc(var(--safe-b) + 18px);
@@ -534,9 +560,251 @@
     display: flex; align-items: center; justify-content: center;
     font-size: 18px; flex: none;
     box-shadow: 0 4px 12px rgba(0, 0, 0, .45), var(--inset);
-    transition: transform .1s;
+    transition: transform .1s, background .15s;
   }
+  .icon-btn:hover { background: linear-gradient(180deg, rgba(70, 66, 102, .90), rgba(36, 34, 54, .92)); }
   .icon-btn:active { transform: scale(.94); }
+
+  /* ---------------- report sheet ---------------- */
+  .radio-row { display: flex; flex-direction: column; gap: 8px; margin: 6px 0 14px; }
+  .radio-opt {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 14px; border-radius: var(--r-md);
+    border: 1px solid var(--border);
+    background: linear-gradient(180deg, rgba(52, 48, 78, .72), rgba(24, 22, 38, .82));
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .35), var(--inset);
+    font-size: 14px; font-weight: 600; cursor: pointer;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .radio-opt input {
+    appearance: none; -webkit-appearance: none;
+    width: 18px; height: 18px; flex: none; margin: 0; border-radius: 50%;
+    border: 2px solid var(--border-2); background: rgba(0, 0, 0, .35);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, .6);
+    transition: .15s;
+  }
+  .radio-opt input:checked {
+    border-color: var(--primary); background: var(--primary);
+    box-shadow: 0 0 12px rgba(255, 212, 0, .55), inset 0 0 0 3px rgba(0, 0, 0, .45);
+  }
+  .radio-opt:has(input:checked) { border-color: rgba(255, 212, 0, .60); }
+
+  /* ---------------- blocking screen (banned) ---------------- */
+  .blocker {
+    position: fixed; inset: 0; z-index: 200; display: none;
+    flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; padding: 28px var(--pad);
+    text-align: center;
+    background:
+      radial-gradient(80% 50% at 50% 0%, rgba(255, 77, 109, .20) 0%, transparent 62%),
+      var(--bg);
+  }
+  .blocker.open { display: flex; }
+  .blocker-orb {
+    width: 104px; height: 104px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; font-size: 44px;
+    background:
+      radial-gradient(circle at 34% 26%, rgba(255, 255, 255, .40) 0%, transparent 44%),
+      linear-gradient(165deg, rgba(255, 77, 109, .55) 0%, rgba(60, 8, 20, .95) 100%);
+    border: 1px solid rgba(255, 77, 109, .55);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, .55), 0 0 60px -10px rgba(255, 77, 109, .55), var(--inset);
+  }
+  .blocker-title { font-size: 24px; font-weight: 800; margin: 0; }
+  .blocker-text { font-size: 14px; line-height: 1.6; color: var(--muted); margin: 0; max-width: 380px; }
+  .blocker-id {
+    font-size: 12px; color: var(--muted); margin: 0;
+    padding: 8px 14px; border-radius: var(--r-pill);
+    border: 1px solid var(--border); background: rgba(0, 0, 0, .3);
+    box-shadow: var(--inset); word-break: break-all;
+  }
+
+  /* ---------------- admin panel ---------------- */
+  /* Admin mode: no call UI, no sheets, no onboarding. The phone's Telegram
+     chrome (or the browser toolbar) stays as-is; only our own layers hide. */
+  body.admin-mode #toast { z-index: 300; }
+  body.admin-mode .sheet-wrap { z-index: 250; }
+  body.admin-mode .blocker { display: none !important; }
+  #admin .scroll, #admin { -webkit-overflow-scrolling: touch; }
+  body.admin-mode { overflow: hidden; }
+
+  .admin-wrap {
+    flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    padding: calc(var(--safe-t) + 20px) var(--pad) calc(var(--safe-b) + 40px);
+    position: relative; z-index: 1;
+  }
+  .admin-inner { max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+  .admin-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .admin-title { font-size: 26px; font-weight: 800; margin: 0; letter-spacing: -.5px; }
+  .admin-sub { font-size: 12px; color: var(--muted); margin: 4px 0 0; }
+  .admin-tag {
+    display: inline-block; font-size: 10px; font-weight: 800; letter-spacing: 1px;
+    text-transform: uppercase; color: var(--danger);
+    border: 1px solid rgba(255, 77, 109, .45); border-radius: var(--r-pill);
+    padding: 3px 9px; margin-left: 8px; vertical-align: middle;
+  }
+
+  .stat-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+    gap: 10px;
+  }
+  .stat-card {
+    position: relative; border-radius: var(--r-md); padding: 14px 14px 12px;
+    background: linear-gradient(160deg, rgba(52, 48, 78, .80) 0%, rgba(20, 19, 33, .90) 100%);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-1), var(--inset);
+  }
+  .stat-card::before {
+    content: ''; position: absolute; left: 16%; right: 16%; top: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--rim), transparent);
+  }
+  .stat-k { display: block; font-size: 10px; font-weight: 700; letter-spacing: .9px; text-transform: uppercase; color: var(--muted); }
+  .stat-v {
+    display: block; font-size: 24px; font-weight: 800; margin-top: 6px;
+    font-variant-numeric: tabular-nums; line-height: 1.1;
+  }
+  .stat-card.warn .stat-v { color: var(--danger); }
+  .stat-card.good .stat-v { color: var(--success); }
+  .stat-card.pay .stat-v { color: var(--primary); }
+
+  .a-sec {
+    position: relative; border-radius: var(--r-lg); padding: 16px;
+    background: linear-gradient(160deg, rgba(46, 43, 70, .78) 0%, rgba(18, 17, 30, .88) 100%);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-2), var(--inset);
+  }
+  .a-sec-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  .a-sec-title { font-size: 15px; font-weight: 800; margin: 0; }
+  .a-sec-sub { font-size: 11px; color: var(--muted); margin: 4px 0 0; }
+  .a-count {
+    font-size: 11px; font-weight: 700; color: var(--muted);
+    border: 1px solid var(--border); border-radius: var(--r-pill);
+    padding: 4px 10px; box-shadow: var(--inset); white-space: nowrap;
+  }
+
+  .a-table-wrap {
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    border-radius: var(--r-md); border: 1px solid var(--border);
+    background: rgba(0, 0, 0, .26);
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, .5);
+  }
+  .a-table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 640px; }
+  .a-table th {
+    text-align: left; font-size: 10px; font-weight: 800; letter-spacing: .7px;
+    text-transform: uppercase; color: var(--muted);
+    padding: 10px 12px; white-space: nowrap;
+    border-bottom: 1px solid var(--border);
+    background: rgba(255, 255, 255, .03);
+    position: sticky; top: 0; z-index: 1;
+  }
+  .a-table th.sortable { cursor: pointer; user-select: none; transition: color .15s, background .15s; }
+  .a-table th.sortable:hover { color: var(--text); background: rgba(255, 212, 0, .08); }
+  .a-table th[aria-sort="descending"]::after { content: ' ▼'; color: var(--primary); }
+  .a-table th[aria-sort="ascending"]::after { content: ' ▲'; color: var(--primary); }
+  .a-table td {
+    padding: 10px 12px; border-bottom: 1px solid rgba(255, 255, 255, .05);
+    vertical-align: middle; white-space: nowrap;
+  }
+  .a-table tbody tr:last-child td { border-bottom: 0; }
+  .a-table tbody tr.clickable { cursor: pointer; }
+  .a-table tbody tr.clickable:hover td { background: rgba(255, 212, 0, .05); }
+  .a-table tbody tr.hot td { background: rgba(255, 77, 109, .07); }
+  .a-table .num { font-variant-numeric: tabular-nums; }
+  .a-empty { padding: 22px 12px; text-align: center; font-size: 12px; color: var(--muted); }
+
+  .pill {
+    display: inline-block; font-size: 10px; font-weight: 800; letter-spacing: .5px;
+    padding: 3px 9px; border-radius: var(--r-pill); border: 1px solid transparent;
+    text-transform: uppercase; white-space: nowrap;
+  }
+  .pill.ok { color: var(--success); border-color: rgba(61, 220, 151, .42); background: rgba(61, 220, 151, .10); }
+  .pill.bad { color: #FF9DB0; border-color: rgba(255, 77, 109, .45); background: rgba(255, 77, 109, .12); }
+  .pill.warn { color: var(--primary); border-color: rgba(255, 212, 0, .42); background: rgba(255, 212, 0, .10); }
+  .pill.mute { color: var(--muted); border-color: var(--border); background: rgba(255, 255, 255, .04); }
+  .pill.male { color: var(--male); border-color: rgba(76, 141, 255, .42); background: rgba(76, 141, 255, .12); }
+  .pill.female { color: var(--female); border-color: rgba(255, 111, 181, .42); background: rgba(255, 111, 181, .12); }
+  .pill.dot-red::before {
+    content: ''; display: inline-block; width: 5px; height: 5px; border-radius: 50%;
+    background: var(--danger); margin-right: 5px; vertical-align: middle;
+  }
+
+  .btn-sm {
+    padding: 7px 12px; border-radius: var(--r-pill); font-size: 11px; font-weight: 800;
+    border: 1px solid var(--border-2); color: var(--text);
+    background: linear-gradient(180deg, rgba(64, 60, 96, .90), rgba(30, 28, 48, .92));
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .40), var(--inset);
+    transition: transform .1s;
+    white-space: nowrap;
+  }
+  .btn-sm:active { transform: scale(.94); }
+  .btn-sm.danger {
+    border-color: rgba(255, 77, 109, .55); color: #FFC2CD;
+    background: linear-gradient(180deg, rgba(255, 77, 109, .30), rgba(160, 20, 48, .45));
+  }
+  .btn-sm.good {
+    border-color: rgba(61, 220, 151, .5); color: #9CF0CC;
+    background: linear-gradient(180deg, rgba(61, 220, 151, .24), rgba(14, 90, 62, .42));
+  }
+  .a-actions { display: flex; gap: 6px; }
+  .a-search-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .a-search-row .input { padding: 10px 14px; font-size: 13px; }
+  .a-search-row .input { flex: 1 1 220px; width: auto; }
+
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+  .toggle-info { min-width: 0; }
+  .toggle-name { font-size: 14px; font-weight: 800; margin: 0; }
+  .toggle-state { font-size: 12px; color: var(--muted); margin: 4px 0 0; line-height: 1.45; }
+  .switch { position: relative; flex: none; width: 62px; height: 34px; border-radius: var(--r-pill); cursor: pointer; }
+  .switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+  .switch .track {
+    position: absolute; inset: 0; border-radius: var(--r-pill);
+    background: linear-gradient(180deg, rgba(20, 19, 33, .95), rgba(40, 38, 60, .95));
+    border: 1px solid var(--border-2);
+    box-shadow: inset 0 2px 6px rgba(0, 0, 0, .7), 0 1px 0 rgba(255, 255, 255, .06);
+    transition: .18s;
+  }
+  .switch .knob {
+    position: absolute; top: 4px; left: 4px; width: 26px; height: 26px; border-radius: 50%;
+    background: linear-gradient(180deg, #F2F0FA, #B9B5CC);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 255, 255, .8);
+    transition: transform .18s, background .18s;
+  }
+  .switch input:checked + .track {
+    background: linear-gradient(180deg, rgba(255, 212, 0, .40), rgba(255, 159, 28, .28));
+    border-color: rgba(255, 212, 0, .60);
+    box-shadow: 0 0 18px rgba(255, 212, 0, .30), inset 0 2px 6px rgba(0, 0, 0, .45);
+  }
+  .switch input:checked + .track + .knob {
+    transform: translateX(28px);
+    background: linear-gradient(180deg, #FFF0A6, var(--primary));
+  }
+
+  .admin-login { max-width: 420px; width: 100%; margin: 0 auto; }
+  .admin-login .card { margin-top: 28px; }
+
+  .dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 12px; }
+  .dl dt { color: var(--muted); }
+  .dl dd { margin: 0; word-break: break-word; }
+
+  .rpt-item {
+    padding: 10px 12px; border-radius: var(--r-md); margin-bottom: 8px;
+    border: 1px solid var(--border);
+    background: linear-gradient(180deg, rgba(48, 44, 72, .70), rgba(20, 19, 33, .82));
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .35), var(--inset);
+    font-size: 12px;
+  }
+  .rpt-line { display: flex; justify-content: space-between; gap: 10px; }
+  .rpt-reason { font-weight: 800; color: #FFB3C1; }
+  .rpt-note { color: var(--muted); margin-top: 5px; line-height: 1.45; word-break: break-word; }
+  .rpt-meta { color: var(--muted); font-size: 10px; margin-top: 5px; }
+
+  .a-notice {
+    font-size: 12px; line-height: 1.5; padding: 10px 12px; border-radius: var(--r-md);
+    border: 1px solid rgba(255, 212, 0, .35); color: #FFE9A3;
+    background: linear-gradient(180deg, rgba(255, 212, 0, .12), rgba(255, 212, 0, .04));
+    box-shadow: var(--inset);
+  }
+  .a-notice.danger { border-color: rgba(255, 77, 109, .45); color: #FFC2CD; background: linear-gradient(180deg, rgba(255, 77, 109, .14), rgba(255, 77, 109, .05)); }
+  .a-notice.ok { border-color: rgba(61, 220, 151, .4); color: #9CF0CC; background: linear-gradient(180deg, rgba(61, 220, 151, .12), rgba(61, 220, 151, .04)); }
 
   /* ---------------- telegram mini app ---------------- */
   /* Telegram injects its own viewport vars; when they exist we trust them over
@@ -622,11 +890,11 @@
   <div class="scroll">
     <div class="intro">
       <h1 class="brand">LinkCall</h1>
-      <p class="tagline">Awaaz se random insaan se baat — sirf audio, koi camera nahi. No signup, no install, bas browser.</p>
+      <p class="tagline">Talk to a random stranger by voice — audio only, no camera. No signup, no install, just your browser.</p>
     </div>
 
     <div class="card">
-      <label class="label" for="nick">Aapka naam</label>
+      <label class="label" for="nick">Your name</label>
       <input id="nick" class="input" type="text" maxlength="24" placeholder="Guest" autocomplete="nickname" enterkeyhint="done">
 
       <span class="label spaced">Avatar</span>
@@ -637,21 +905,21 @@
         <button class="avatar-btn" data-avatar="🎧" aria-pressed="false" type="button" aria-label="Avatar 4">🎧</button>
       </div>
 
-      <span class="label spaced">Main kaun hoon</span>
+      <span class="label spaced">I am</span>
       <div class="chips" id="genderPick" role="group" aria-label="Gender">
         <button class="chip" data-g="male" aria-pressed="false" type="button">Male</button>
         <button class="chip" data-g="female" aria-pressed="false" type="button">Female</button>
       </div>
-      <p class="hint">Optional. Gender se matchmaking filter kaam karta hai — sirf taab jab dono ne bataya ho.</p>
+      <p class="hint">Optional. Gender powers the matchmaking filter — it only works when both sides have set it.</p>
 
       <p class="error hidden" id="onboardError"></p>
 
-      <button class="btn btn-primary spaced-top" id="startBtn" type="button">Shuru karein</button>
+      <button class="btn btn-primary spaced-top" id="startBtn" type="button">Get started</button>
     </div>
 
     <p class="hint legal-note">
-      Aage badhkar aap confirm karte hain ki aap <strong>18+</strong> hain aur doosron ka respect karenge.
-      Awaaz seedha peer-to-peer jati hai — beech mein koi server sunta nahi.
+      By continuing you confirm that you are <strong>18+</strong> and will respect others.
+      Voice travels directly peer-to-peer — no server in the middle listens in.
     </p>
   </div>
 </section>
@@ -669,25 +937,29 @@
   <div class="stage-mid">
     <button class="orb" id="orb" type="button">
       <span class="glyph">🎧</span>
-      <span id="orbText">Tap to<br>start</span>
+      <span class="orb-label">Tap to<br>start</span>
     </button>
-    <p class="helper" id="helper">Mic on karke random insaan se awaaz mein baat karein</p>
+    <p class="helper" id="helper">Talk to a random stranger by voice</p>
     <p class="hint online-hint" id="onlineHint"></p>
   </div>
 
   <div class="bottom-pad">
     <div class="notice info hidden" id="homeNotice"></div>
     <div>
-      <span class="label">Kisse baat karni hai?</span>
+      <span class="label">Who do you want to talk to?</span>
       <div class="chips" id="filterChips" role="group" aria-label="Match filter">
-        <button class="chip" data-f="" aria-pressed="true" type="button">Koi bhi</button>
+        <button class="chip" data-f="" aria-pressed="true" type="button">Anyone</button>
         <button class="chip" data-f="female" aria-pressed="false" type="button">Female</button>
         <button class="chip" data-f="male" aria-pressed="false" type="button">Male</button>
       </div>
+      <p class="pay-note hidden" id="payNote">
+        <span id="payText">Unlock the gender filter.</span>
+        <button class="pay-link" id="payBtn" type="button">Unlock ⭐</button>
+      </p>
     </div>
     <button class="btn btn-primary" id="primaryBtn" type="button">Start voice call</button>
     <button class="btn btn-ghost" id="shareBtn" type="button">
-      <span aria-hidden="true">📤</span> Doston ko invite karein
+      <span aria-hidden="true">📤</span> Invite your friends
     </button>
   </div>
 </section>
@@ -729,9 +1001,10 @@
       <button class="ctrl" id="micBtn" type="button"><span class="ico">🎤</span><span id="micLabel">Mute</span></button>
       <button class="ctrl" id="speakerBtn" type="button"><span class="ico">🔊</span><span id="speakerLabel">Speaker</span></button>
       <button class="ctrl" id="chatBtn" type="button"><span class="ico">💬</span><span>Chat</span></button>
+      <button class="ctrl" id="reportBtn" type="button" aria-label="Report user"><span class="ico">🚩</span><span>Report</span></button>
     </div>
     <button class="btn btn-danger" id="nextBtn" type="button">Next person</button>
-    <button class="btn btn-ghost" id="endBtn" type="button">Awaaz band karein</button>
+    <button class="btn btn-ghost" id="endBtn" type="button">End call</button>
   </div>
 </section>
 
@@ -742,7 +1015,7 @@
       <div class="ended-orb" aria-hidden="true">📞</div>
       <h2 class="ended-title">Call ended</h2>
       <p class="ended-time" id="endedTime">00:00</p>
-      <p class="ended-reason" id="endedReason">Call khatam.</p>
+      <p class="ended-reason" id="endedReason">Call ended.</p>
       <div class="ended-actions">
         <button class="btn btn-ghost" id="endedHome" type="button">Home</button>
         <button class="btn btn-primary" id="endedAgain" type="button">Next person</button>
@@ -763,22 +1036,22 @@
     <div class="kv"><span>Status</span><span id="stStatus">—</span></div>
     <div class="kv"><span>Lobby</span><span id="stRoom">—</span></div>
     <div class="kv"><span>Signalling</span><span id="stBroker">—</span></div>
-    <div class="kv"><span>Log baaki hain</span><span id="stAlive">—</span></div>
-    <div class="kv"><span>Aap</span><span id="stId">—</span></div>
+    <div class="kv"><span>Peers online</span><span id="stAlive">—</span></div>
+    <div class="kv"><span>You</span><span id="stId">—</span></div>
     <div class="kv"><span>Partner</span><span id="stPeer">—</span></div>
 
     <span class="label spaced">Privacy</span>
-    <div class="kv"><span>Awaaz</span><span>P2P, DTLS-SRTP encrypted</span></div>
-    <div class="kv"><span>Camera</span><span>Kabhi use nahi hota</span></div>
+    <div class="kv"><span>Voice</span><span>P2P, DTLS-SRTP encrypted</span></div>
+    <div class="kv"><span>Video</span><span>Disabled (audio only)</span></div>
     <div class="kv"><span>Server</span><span>Public MQTT relay (no account)</span></div>
-    <div class="kv"><span>Saved</span><span>Naam, avatar, gender (local only)</span></div>
+    <div class="kv"><span>Saved</span><span>Name, avatar, gender (local only)</span></div>
 
-    <button class="btn btn-ghost spaced-top" id="changeRoomBtn" type="button">Lobby badlein</button>
-    <button class="btn btn-ghost" id="clearDataBtn" type="button">Profile reset</button>
+    <button class="btn btn-ghost spaced-top" id="changeRoomBtn" type="button">Change lobby</button>
+    <button class="btn btn-ghost" id="clearDataBtn" type="button">Reset profile</button>
 
     <p class="hint">
-      "Lobby" ek public room jaisa hai. Default lobby par is page ke saare users aate hain, isliye kahin se bhi
-      koi bhi match ho sakta hai. Private lobby bana kar sirf apne doston ko code dein.
+      A lobby is like a public room. Everyone using this page joins the default lobby, which is why
+      you can match with anyone, anywhere. Create a private lobby and share the code only with your friends.
     </p>
   </div>
 </div>
@@ -791,12 +1064,250 @@
       <button class="icon-btn" data-close-sheet type="button" aria-label="Close">✕</button>
     </div>
     <p class="sheet-hint">
-      Default lobby = poori duniya. Private lobby = sirf woh log jinko aap yeh code denge.
-      Khaali chhodne par default lobby use hogi.
+      The default lobby is the whole world. A private lobby is only the people you give this code to.
+      Leave it empty to use the default lobby.
     </p>
     <input class="input" id="roomInput" type="text" maxlength="32" placeholder="default" autocomplete="off" spellcheck="false">
     <button class="btn btn-primary" id="roomSave" type="button">Save &amp; reconnect</button>
-    <button class="btn btn-ghost" id="roomRandom" type="button">Private lobby banao</button>
+    <button class="btn btn-ghost" id="roomRandom" type="button">Create private lobby</button>
+  </div>
+</div>
+
+<!-- ============ REPORT SHEET ============ -->
+<div class="sheet-wrap" id="reportSheet">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="reportTitle">
+    <div class="sheet-head">
+      <h3 class="sheet-title" id="reportTitle">Report this user</h3>
+      <button class="icon-btn" data-close-sheet type="button" aria-label="Close">✕</button>
+    </div>
+    <p class="sheet-hint">
+      Tell us what this person did wrong. Your Telegram ID is saved with the report,
+      and is never shown to your partner.
+    </p>
+
+    <div class="radio-row" id="reportReasons" role="radiogroup" aria-label="Reason">
+      <label class="radio-opt"><input type="radio" name="rptReason" value="abusive" checked><span>Abusive / hate speech</span></label>
+      <label class="radio-opt"><input type="radio" name="rptReason" value="spam"><span>Spam / advertising</span></label>
+      <label class="radio-opt"><input type="radio" name="rptReason" value="fake"><span>Fake profile / impersonation</span></label>
+      <label class="radio-opt"><input type="radio" name="rptReason" value="other"><span>Something else</span></label>
+    </div>
+
+    <label class="label" for="reportNote">Note (optional)</label>
+    <input class="input" id="reportNote" type="text" maxlength="300" placeholder="Add a few details…" autocomplete="off">
+
+    <p class="hint" id="reportHint"></p>
+    <button class="btn btn-danger spaced-top" id="reportSend" type="button">🚩 Send report</button>
+  </div>
+</div>
+
+<!-- ============ BANNED BLOCKER ============ -->
+<div class="blocker" id="blocker">
+  <div class="blocker-orb" aria-hidden="true">🚫</div>
+  <h2 class="blocker-title">Your access is blocked</h2>
+  <p class="blocker-text" id="blockerText">
+    You have been banned because of reports. If you believe this was a mistake,
+    please contact support.
+  </p>
+  <p class="blocker-id" id="blockerId"></p>
+</div>
+
+<!-- ============ ADMIN (only shown at /admin) ============ -->
+<section class="screen" id="admin">
+  <div class="admin-wrap" id="adminLoginWrap">
+    <div class="admin-login">
+      <div class="intro">
+        <h1 class="admin-title">LinkCall Admin</h1>
+        <p class="admin-sub">This panel is for administrators only.</p>
+      </div>
+      <div class="card">
+        <label class="label" for="adminId">Admin ID</label>
+        <input class="input" id="adminId" type="text" autocomplete="username" placeholder="admin" spellcheck="false">
+        <label class="label spaced" for="adminPass">Password</label>
+        <input class="input" id="adminPass" type="password" autocomplete="current-password" placeholder="••••••••">
+        <p class="error hidden" id="adminError"></p>
+        <button class="btn btn-primary spaced-top" id="adminLoginBtn" type="button">Login</button>
+        <p class="hint legal-note">
+          Admin credentials are provided through Vercel environment variables
+          (ADMIN_ID and ADMIN_PASSWORD). Nothing is hardcoded in this file.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="admin-wrap hidden" id="adminWrap">
+    <div class="admin-inner">
+      <div class="admin-head">
+        <div>
+          <h1 class="admin-title">Admin <span class="admin-tag" id="adminEnvTag">LIVE</span></h1>
+          <p class="admin-sub" id="adminSub">—</p>
+        </div>
+        <button class="btn-sm" id="adminLogout" type="button">Logout</button>
+      </div>
+
+      <div class="a-notice danger" id="adminCfgWarn">
+        <strong>Backend not connected.</strong> Firebase environment variables are missing or the API
+        routes were not deployed. Every number below stays empty until
+        <code>FIREBASE_SERVICE_ACCOUNT</code> is set.
+      </div>
+
+      <div class="stat-grid" id="statGrid">
+        <div class="stat-card"><span class="stat-k">Total users</span><span class="stat-v" id="stTotalUsers">—</span></div>
+        <div class="stat-card good"><span class="stat-k">Online now</span><span class="stat-v" id="stOnline">—</span></div>
+        <div class="stat-card"><span class="stat-k">Waiting</span><span class="stat-v" id="stWaiting">—</span></div>
+        <div class="stat-card"><span class="stat-k">In call</span><span class="stat-v" id="stInCall">—</span></div>
+        <div class="stat-card"><span class="stat-k">Calls today</span><span class="stat-v" id="stCallsToday">—</span></div>
+        <div class="stat-card pay"><span class="stat-k">Revenue (Stars)</span><span class="stat-v" id="stRevenue">—</span></div>
+        <div class="stat-card warn"><span class="stat-k">Reports today</span><span class="stat-v" id="stReportsToday">—</span></div>
+      </div>
+
+      <!-- B. payment toggle -->
+      <div class="a-sec">
+        <div class="a-sec-head">
+          <div>
+            <h2 class="a-sec-title">Gender Matching</h2>
+            <p class="a-sec-sub">Free = everyone gets the filter. Paid = 50 Stars to unlock it.</p>
+          </div>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <p class="toggle-name" id="payName">Loading…</p>
+            <p class="toggle-state" id="payState">Reading the setting from the server…</p>
+          </div>
+          <label class="switch" aria-label="Gender matching paid toggle">
+            <input type="checkbox" id="payToggle">
+            <span class="track"></span>
+            <span class="knob"></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- C. live waiting -->
+      <div class="a-sec">
+        <div class="a-sec-head">
+          <h2 class="a-sec-title">Live — waiting users</h2>
+          <span class="a-count" id="waitCount">0</span>
+        </div>
+        <div class="a-table-wrap">
+          <table class="a-table">
+            <thead>
+              <tr>
+                <th>Telegram ID</th><th>Name</th><th>Gender</th><th>Filter</th>
+                <th>Waiting (s)</th><th>Reports</th>
+              </tr>
+            </thead>
+            <tbody id="waitBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- D. live calls -->
+      <div class="a-sec">
+        <div class="a-sec-head">
+          <h2 class="a-sec-title">Live — active calls</h2>
+          <span class="a-count" id="callCount">0</span>
+        </div>
+        <div class="a-table-wrap">
+          <table class="a-table">
+            <thead>
+              <tr>
+                <th>Call ID</th><th>User A</th><th>User B</th><th>Duration</th><th>Started</th>
+              </tr>
+            </thead>
+            <tbody id="liveCallBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- E. user registry -->
+      <div class="a-sec">
+        <div class="a-sec-head">
+          <h2 class="a-sec-title">Users</h2>
+          <span class="a-count" id="userCount">0</span>
+        </div>
+        <p class="a-sec-sub">Default sort: Reports (most first). Tap a column header to change the sort.</p>
+        <div class="a-search-row">
+          <input class="input" id="userSearch" type="search" placeholder="Search by ID or name…" autocomplete="off">
+          <button class="btn-sm" id="userRefresh" type="button">Refresh</button>
+        </div>
+        <div class="a-table-wrap">
+          <table class="a-table" id="userTable">
+            <thead>
+              <tr>
+                <th class="sortable" data-sort="reports">Reports</th>
+                <th class="sortable" data-sort="status">Status</th>
+                <th class="sortable" data-sort="id">Telegram ID</th>
+                <th class="sortable" data-sort="name">Name</th>
+                <th class="sortable" data-sort="firstSeen">First seen</th>
+                <th class="sortable" data-sort="lastSeen">Last seen</th>
+                <th class="sortable" data-sort="paid">Payment</th>
+                <th class="sortable" data-sort="calls">Calls</th>
+                <th class="sortable" data-sort="minutes">Minutes</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="userBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- G. call history -->
+      <div class="a-sec">
+        <div class="a-sec-head">
+          <h2 class="a-sec-title">Call history</h2>
+          <div class="a-actions">
+            <button class="btn-sm" id="callsPrev" type="button">‹ Newer</button>
+            <button class="btn-sm" id="callsNext" type="button">Older ›</button>
+          </div>
+        </div>
+        <div class="a-table-wrap">
+          <table class="a-table">
+            <thead>
+              <tr>
+                <th>Call ID</th><th>User A</th><th>User B</th><th>Start</th><th>End</th><th>Duration</th>
+              </tr>
+            </thead>
+            <tbody id="histBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- I. action log -->
+      <div class="a-sec">
+        <div class="a-sec-head">
+          <h2 class="a-sec-title">Admin action log</h2>
+          <span class="a-count" id="logCount">0</span>
+        </div>
+        <div class="a-table-wrap">
+          <table class="a-table">
+            <thead><tr><th>Time</th><th>Action</th><th>Target</th><th>Details</th></tr></thead>
+            <tbody id="logBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ USER DETAIL SHEET (admin) ============ -->
+<div class="sheet-wrap" id="userSheet">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="userSheetTitle">
+    <div class="sheet-head">
+      <h3 class="sheet-title" id="userSheetTitle">User</h3>
+      <button class="icon-btn" data-close-sheet type="button" aria-label="Close">✕</button>
+    </div>
+    <dl class="dl" id="userMeta"></dl>
+    <div class="a-actions spaced-top" id="userSheetActions"></div>
+
+    <h4 class="label spaced">Reports</h4>
+    <div id="userReports"></div>
+
+    <h4 class="label spaced">Call history</h4>
+    <div class="a-table-wrap">
+      <table class="a-table">
+        <thead><tr><th>Start</th><th>Partner</th><th>Duration</th></tr></thead>
+        <tbody id="userCallBody"></tbody>
+      </table>
+    </div>
   </div>
 </div>
 
@@ -825,7 +1336,13 @@
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' }
       // ,{ urls: 'turn:your.turn.host:3478', username: 'user', credential: 'pass' }
-    ]
+    ],
+    /* Admin panel path. Opened at https://your-app/admin (a Vercel rewrite in
+       vercel.json serves this same file there). Change it to hide it further. */
+    ADMIN_PATH: '/admin',
+    /* Stars price for Gender Matching. Display only — the real price is set when
+       the invoice is created (see README, "Stars payment"). */
+    PRICE_STARS: 50
   };
 
   var TOPIC_ROOT = 'linkcall/v2';
@@ -837,6 +1354,8 @@
   var CONNECT_DEADLINE_MS = 25000; // give up if media never starts flowing
   var RECENT_TTL_MS = 30000;   // don't instantly re-match someone we skipped
   var HELLO_BURST_MS = 400;    // extra announcements right after joining
+  var SRV_BEAT_MS = 3000;      // /api/heartbeat cadence (admin live table)
+  var ADMIN_REFRESH_MS = 5000; // admin live tables
 
   var state = {
     me: null,                     // { id, name, avatar, gender }
@@ -857,7 +1376,13 @@
     pendingInvite: null,
     earlyOffer: null,
     earlyIce: [],
-    timers: { beat: null, invite: null, accept: null, burst: null }
+    timers: { beat: null, invite: null, accept: null, burst: null },
+    /* ---- server-side (Firebase) integration ---- */
+    tgId: '',            // stable identity for the backend: tg id or web_xxxx
+    access: null,        // { banned, unlocked, paid, paymentRequired }
+    serverBeat: null,    // interval id for POST /api/heartbeat
+    callPosted: false,   // this call was already reported to /api/call-event start
+    isAdmin: false
   };
 
   // ---------------------------------------------------------------- helpers
@@ -914,6 +1439,293 @@
     el.classList.toggle('hidden', !text);
   }
 
+  // ------------------------------------------------------- backend (Firebase)
+  /* Everything here is optional: if the API routes are not deployed, or
+     FIREBASE_SERVICE_ACCOUNT is missing, every function fails soft and the app
+     keeps working as a pure peer-to-peer client. That keeps the single-file
+     promise intact — the backend only adds admin/moderation.
+
+     NOTHING secret lives in this file. The Firebase Admin key and the bot token
+     stay in Vercel env vars; the browser never sees them. */
+
+  function apiUrl(path) {
+    /* Same-origin: the API routes ship with the same Vercel project. */
+    return path;
+  }
+
+  function apiGet(path) {
+    return fetch(apiUrl(path), { method: 'GET', headers: { Accept: 'application/json' } })
+      .then(function (r) { return r.json(); })
+      .catch(function () { return { ok: false, offline: true }; });
+  }
+
+  function apiPost(path, body, headers) {
+    return fetch(apiUrl(path), {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, headers || {}),
+      body: JSON.stringify(body || {})
+    }).then(function (r) { return r.json(); })
+      .catch(function () { return { ok: false, offline: true }; });
+  }
+
+  /* Identity for the backend. Inside Telegram it is the real Telegram user id,
+     which is what the admin panel bans. Outside Telegram there is no such id,
+     so we mint a stable `web_<random>` and keep it in localStorage — otherwise
+     every reload would look like a brand-new user in the registry. */
+  var WEB_ID_KEY = 'linkcall.webid';
+
+  function telegramId() {
+    if (state.tgId) return state.tgId;
+    var id = '';
+    try {
+      if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.id) {
+        id = String(tg.initDataUnsafe.user.id);
+      }
+    } catch (e) { /* ignore */ }
+    if (!id) {
+      try { id = localStorage.getItem(WEB_ID_KEY) || ''; } catch (e) { id = ''; }
+      if (!id) {
+        id = 'web_' + uid().slice(0, 14);
+        try { localStorage.setItem(WEB_ID_KEY, id); } catch (e) { /* private mode */ }
+      }
+    }
+    state.tgId = id;
+    return id;
+  }
+
+  /* One call on load: is this user banned, did they pay, and is the filter free
+     right now? Failure is non-fatal by design (see apiGet). */
+  function loadAccess() {
+    var id = telegramId();
+    return apiGet('/api/check-access?telegram_id=' + encodeURIComponent(id))
+      .then(function (res) {
+        /* Offline / backend not deployed: keep whatever we knew and let the app
+           stay a plain peer-to-peer client. Writing a "backend said no" record
+           here would lock the gender filter for every user of a static deploy,
+           which is not what a network blip should do. */
+        if (!res || res.offline) return state.access;
+
+        state.access = {
+          banned: !!res.banned,
+          unlocked: !!res.unlocked,
+          paid: !!res.paid,
+          paymentRequired: res.paymentRequired !== false
+        };
+        if (state.access.banned) showBlocker(id);
+        renderHome();
+        return state.access;
+      });
+  }
+
+  function showBlocker(id) {
+    var box = $('blocker');
+    if (!box) return;
+    $('blockerId').textContent = 'ID: ' + id;
+    box.classList.add('open');
+    stopServerBeat();
+    /* A banned user must not keep a call alive. endCall() publishes the MQTT
+       `bye`, which is what actually hangs up the other side. */
+    if (state.call) endCall('Your access is blocked.', false);
+    if (state.searching) { state.searching = false; renderHome(); }
+    sayGoodbye();
+    stopBeating();
+    try { if (state.client) state.client.end(true); } catch (e) { /* ignore */ }
+    state.client = null;
+    state.ready = false;
+  }
+
+  /* True only when the Gender filter should actually be usable. */
+  function filterAllowed() {
+    var a = state.access;
+    if (!a) return true;                    // backend not reachable: do not block
+    if (a.unlocked || a.paid) return true;
+    return a.paymentRequired === false;
+  }
+
+  /* --- heartbeat ------------------------------------------------------- */
+  function serverStatus() {
+    if (state.call) return 'calling';
+    if (state.searching) return 'waiting';
+    return 'idle';
+  }
+
+  function sendServerBeat() {
+    if (state.isAdmin) return;               // the admin panel is not a user
+    if (state.access && state.access.banned) return;
+    var me = state.me;
+    if (!me) return;
+    apiPost('/api/heartbeat', {
+      telegram_id: telegramId(),
+      name: me.name,
+      avatar: me.avatar,
+      gender: me.gender,
+      filter: state.filter,
+      status: serverStatus(),
+      peer_id: state.call ? state.call.peerId : null,
+      since: state.searching ? state.waitingSince : 0
+    }).then(function (res) {
+      /* The heartbeat is also the fast path for a ban that happens mid-session:
+         <= 3 s after the admin taps Ban the user is disconnected. */
+      if (res && res.banned && !(state.access && state.access.banned)) {
+        if (state.access) state.access.banned = true;
+        showBlocker(telegramId());
+      }
+    });
+  }
+
+  function startServerBeat() {
+    if (state.serverBeat) return;
+    sendServerBeat();
+    state.serverBeat = setInterval(sendServerBeat, SRV_BEAT_MS);
+  }
+
+  function stopServerBeat() {
+    if (state.serverBeat) clearInterval(state.serverBeat);
+    state.serverBeat = null;
+  }
+
+  /* --- call events ------------------------------------------------------ */
+  function reportCallStart(peers) {
+    if (state.callPosted) return;
+    state.callPosted = true;
+    apiPost('/api/call-event', {
+      event: 'start',
+      call_id: state.call ? state.call.callId : '',
+      userA: telegramId(),
+      userB: peers || ''
+    });
+  }
+
+  function reportCallEnd(callId, peerId, seconds) {
+    state.callPosted = false;
+    apiPost('/api/call-event', {
+      event: 'end',
+      call_id: callId,
+      userA: telegramId(),
+      userB: peerId || '',
+      duration: Math.max(0, Math.round(seconds || 0))
+    });
+  }
+
+  /* --- report (user-facing) --------------------------------------------- */
+  var REPORT_MAX_PER_CALL = 1;
+
+  function reportKey(callId) { return 'linkcall.reported.' + callId; }
+
+  function alreadyReported(callId) {
+    try { return localStorage.getItem(reportKey(callId)) === '1'; } catch (e) { return false; }
+  }
+
+  function markReported(callId) {
+    try { localStorage.setItem(reportKey(callId), '1'); } catch (e) { /* ignore */ }
+  }
+
+  function openReportSheet() {
+    var call = state.call;
+    if (!call) { toast('You need an active call to report someone'); return; }
+    if (alreadyReported(call.callId)) {
+      setReportHint('You have already reported this call.', true);
+      $('reportSend').disabled = true;
+    } else {
+      setReportHint('');
+      $('reportSend').disabled = false;
+    }
+    $('reportNote').value = '';
+    openSheet('reportSheet');
+  }
+
+  function setReportHint(text, bad) {
+    var el = $('reportHint');
+    if (!el) return;
+    el.textContent = text || '';
+    el.classList.toggle('bad', !!bad);
+    el.classList.toggle('hidden', !text);
+  }
+
+  /* --- Stars payment --------------------------------------------------- */
+  /* The unlock is granted by the WEBHOOK, not here. This only opens the invoice
+     and then re-checks access, so a user who closes the sheet early simply
+     stays locked until the next check. */
+  function unlockFilter() {
+    var btn = $('payBtn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Wait…'; }
+
+    function restore() {
+      if (btn) { btn.disabled = false; btn.textContent = 'Unlock ⭐'; }
+    }
+
+    apiPost('/api/create-invoice', { telegram_id: telegramId() }).then(function (res) {
+      restore();
+
+      if (res && res.already) {
+        toast('You already have this unlocked.');
+        loadAccess().then(function () { renderHome(); });
+        return;
+      }
+      if (!res || res.ok === false) {
+        toast((res && res.error) || 'Could not create the invoice.', true);
+        return;
+      }
+      if (!tg || !tg.openInvoice) {
+        toast('Open this inside Telegram to pay.', true);
+        return;
+      }
+
+      tg.openInvoice(res.link, function (status) {
+        if (status === 'paid') {
+          toast('Payment received — unlocking the filter…');
+          /* The webhook and this callback race; polling keeps the UI honest
+             even if the webhook is a second late. */
+          var tries = 0;
+          var poll = setInterval(function () {
+            tries += 1;
+            loadAccess().then(function (a) {
+              if ((a && (a.paid || a.unlocked)) || tries > 8) {
+                clearInterval(poll);
+                renderHome();
+                if (a && (a.paid || a.unlocked)) toast('Gender filter unlocked ⭐');
+              }
+            });
+          }, 1500);
+          return;
+        }
+        if (status === 'cancelled') toast('Payment cancelled.');
+        else if (status === 'failed') toast('Payment failed.', true);
+      });
+    });
+  }
+
+  function submitReport() {
+    var call = state.call;
+    if (!call) { closeSheets(); toast('The call has ended', true); return; }
+    if (alreadyReported(call.callId)) return;
+
+    var picked = document.querySelector('input[name="rptReason"]:checked');
+    var reason = picked ? picked.value : 'other';
+    var note = ($('reportNote').value || '').trim().slice(0, 300);
+    var btn = $('reportSend');
+    btn.disabled = true;
+
+    apiPost('/api/report', {
+      reporter_id: telegramId(),
+      reporter_name: state.me ? state.me.name : '',
+      reported_id: call.peerTid || call.peerId,
+      reported_mqtt_id: call.peerId,
+      call_id: call.callId,
+      reason: reason,
+      note: note
+    }).then(function (res) {
+      btn.disabled = false;
+      if (res && res.ok === false && !res.offline) {
+        toast(res.error || 'Report failed — please try again.', true);
+        return;
+      }
+      markReported(call.callId);
+      closeSheets();
+      toast('Report sent.');
+    });
+  }
+
   // ------------------------------------------------------- telegram mini app
   /* Telegram Mini Apps boot synchronously into window.Telegram.WebApp. When the
      page is opened in a plain browser that object never appears, so every call
@@ -959,7 +1771,7 @@
     try {
       if (api.BackButton) {
         api.BackButton.onClick(function () {
-          if (state.call) { endCall('Aapne back dabaya.', false); return; }
+          if (state.call) { endCall('You pressed back.', false); return; }
           if (document.querySelector('.sheet-wrap.open')) { closeSheets(); return; }
         });
         api.BackButton.show();
@@ -1013,7 +1825,7 @@
      clipboard, and then to a plain toast, so it never dead-ends. */
   function shareInvite() {
     var url = location.origin + location.pathname + '?lobby=' + encodeURIComponent(lobbySlug());
-    var text = 'LinkCall — random audio chat. Is lobby mein aao: ' + lobbySlug();
+    var text = 'LinkCall — random audio-only chat. Join this lobby: ' + lobbySlug();
     var tgUrl = 'https://t.me/share/url?url=' + encodeURIComponent(url) + '&text=' + encodeURIComponent(text);
 
     if (tg && tg.openTelegramLink) {
@@ -1023,7 +1835,7 @@
       navigator.share({ title: 'LinkCall', text: text, url: url }).catch(function () { /* user cancelled */ });
       return;
     }
-    copyText(url, 'Link copy ho gaya — doston ko bhej dein');
+    copyText(url, 'Link copied — send it to your friends');
   }
 
   function copyText(value, okMessage) {
@@ -1049,7 +1861,7 @@
       document.body.removeChild(ta);
       done();
     } catch (e) {
-      toast('Copy nahi ho paya — manually likh lein', true);
+      toast('Could not copy — please copy it manually', true);
     }
   }
 
@@ -1102,8 +1914,8 @@
   function connectSignalling() {
     var lib = window.mqtt;
     if (!lib) {
-      setNet('off', 'Script load nahi hui');
-      setNotice($('homeNotice'), 'MQTT library CDN se load nahi hui. Ad-blocker band karke page reload karein.');
+      setNet('off', 'Script failed to load');
+      setNotice($('homeNotice'), 'The MQTT library did not load from its CDN. Turn off your ad-blocker and reload the page.');
       return;
     }
 
@@ -1128,7 +1940,7 @@
         resubscribe: true
       });
     } catch (e) {
-      setNet('off', 'Signalling URL galat hai');
+      setNet('off', 'Signalling URL is invalid');
       return;
     }
     state.client = client;
@@ -1139,7 +1951,7 @@
       setNotice($('homeNotice'), '');
 
       client.subscribe([tPresence(), tInbox(state.me.id)], { qos: 0 }, function (err) {
-        if (err) { setNet('off', 'Subscribe fail'); return; }
+        if (err) { setNet('off', 'Subscription failed'); return; }
         hello(true);
         startBeating();
       });
@@ -1181,6 +1993,7 @@
     return {
       v: 2,
       id: state.me.id,
+      tid: telegramId(),
       name: state.me.name,
       avatar: state.me.avatar,
       gender: state.me.gender,
@@ -1248,6 +2061,7 @@
 
     state.peers[msg.id] = {
       id: msg.id,
+      tid: msg.tid || '',   /* backend id of this peer, used when reporting them */
       name: msg.name || 'Stranger',
       avatar: msg.avatar || '🙂',
       gender: msg.gender || null,
@@ -1348,7 +2162,7 @@
     state.invited = Object.create(null);
     hello(false);
     renderHome();
-    if (!silent) toast('Search cancel');
+    if (!silent) toast('Search cancelled');
   }
 
   function tryMatch() {
@@ -1409,6 +2223,7 @@
   function identity() {
     return {
       id: state.me.id,
+      tid: telegramId(),   /* backend identity, so a report can actually ban someone */
       name: state.me.name,
       avatar: state.me.avatar,
       gender: state.me.gender
@@ -1516,7 +2331,7 @@
     clearTimeout(state.timers.accept);
     state.timers.accept = setTimeout(function () {
       if (state.call === call && !call.remoteSet) {
-        endCall('Partner se connection nahi bana — network badal kar dekhein.', true);
+        endCall('Could not connect to your partner — try a different network.', true);
       }
     }, ACCEPT_WAIT_MS);
   }
@@ -1571,15 +2386,15 @@
   }
 
   function reasonText(reason) {
-    if (reason === 'busy') return 'Wo abhi kisi aur se baat kar rahe hain — next try karein.';
-    if (reason === 'unsupported') return 'Unka browser call support nahi karta.';
-    return 'Partner ne decline kar diya.';
+    if (reason === 'busy') return 'They are already talking to someone — try Next person.';
+    if (reason === 'unsupported') return 'Their browser does not support calls.';
+    return 'Your partner declined.';
   }
 
   function onBye(msg) {
     var call = state.call;
     if (!call || call.callId !== msg.callId) return;
-    endCall('Partner ne call end kar di.', true);
+    endCall('Your partner ended the call.', true);
   }
 
   // ========================================================= audio engine
@@ -1599,7 +2414,7 @@
     try {
       pc = new RTCPeerConnection(rtcConfig(opts.ice));
     } catch (e) {
-      toast('Is browser mein WebRTC nahi chal raha', true);
+      toast('WebRTC is not working in this browser', true);
       // Tell the caller we cannot build a call, so it stops ringing us.
       if (opts.role === 'callee' && opts.callId) {
         publish(tInbox(opts.peerId), {
@@ -1615,6 +2430,12 @@
     var call = {
       callId: opts.callId,
       peerId: opts.peerId,
+      /* Backend identity of the partner. A report must point at a Telegram id
+         (or a persistent web_ id), not the throwaway MQTT id, or banning does
+         nothing. Comes from the invite/accept payload; falls back to the live
+         presence record if the partner was already in our peer list. */
+      peerTid: (opts.partner && opts.partner.tid) ||
+        (state.peers[opts.peerId] && state.peers[opts.peerId].tid) || '',
       partner: opts.partner || { name: 'Stranger' },
       role: opts.role,
       pc: pc,
@@ -1636,6 +2457,7 @@
       stereo: false   // mic came back multi-channel despite asking for mono
     };
     state.call = call;
+    reportCallStart(call.peerId);
 
     pc.onicecandidate = function (event) {
       if (!event.candidate || state.call !== call) return;
@@ -1674,7 +2496,7 @@
         // hearing yourself back. Headphones solve it without any code.
         if (!call.aec && !call.echoWarned) {
           call.echoWarned = true;
-          toast('Echo aa sakta hai — headphone lagayein ya volume kam karein', true);
+          toast('You may hear an echo — use headphones or lower the volume', true);
         }
         return;
       }
@@ -1683,12 +2505,12 @@
         call.speakerTimer = setTimeout(function () {
           call.speakerTimer = null;
           if (state.call === call && pc.connectionState !== 'connected') {
-            endCall('Connection chali gayi — network check karein.', true);
+            endCall('Connection lost — check your network.', true);
           }
         }, GONE_GRACE_MS);
         return;
       }
-      if (s === 'failed') endCall('Connection fail — network badal kar try karein.', true);
+      if (s === 'failed') endCall('Connection failed — try a different network.', true);
     };
 
     showScreen('call');
@@ -1701,7 +2523,7 @@
        spinning forever, because nothing else sets a deadline for the caller. */
     call.watchdog = setTimeout(function () {
       if (state.call !== call || call.connectedAt) return;
-      endCall('Connection nahi ban paya. Network badal kar try karein.', true);
+      endCall('Could not connect. Try a different network.', true);
     }, CONNECT_DEADLINE_MS);
 
     window.addEventListener('beforeunload', onPageHide);
@@ -1732,7 +2554,7 @@
     return navigator.mediaDevices.getUserMedia(micConstraints()).catch(function (err) {
       /* OverconstrainedError / NotSupportedError: the device refuses one of the
          optional knobs. Falling back to `audio: true` keeps the call alive —
-         without this the user just sees "mic permission nahi mili". */
+         without this the user just sees "no mic permission". */
       if (err && (err.name === 'OverconstrainedError' || err.name === 'NotSupportedError' || err.name === 'TypeError')) {
         return navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       }
@@ -1774,11 +2596,11 @@
       if (track) {
         track.addEventListener('ended', function () {
           if (state.call === call && !call.ended) {
-            endCall('Mic band ho gaya (doosra app ya call). Dobara try karein.', false);
+            endCall('Microphone stopped (another app or call). Please try again.', false);
           }
         });
         track.addEventListener('mute', function () {
-          if (state.call === call && !call.ended) setPeerStatus('Mic ruk gaya — check karein');
+          if (state.call === call && !call.ended) setPeerStatus('Mic paused — check it');
         });
         track.addEventListener('unmute', function () {
           if (state.call === call && !call.ended && call.connectedAt) setPeerStatus('Connected');
@@ -1921,6 +2743,7 @@
     call.ended = true;
     call.endedAt = now();
     var seconds = elapsedSeconds(call);
+    reportCallEnd(call.callId, call.peerId, seconds);
 
     if (call.speakerTimer) clearTimeout(call.speakerTimer);
     if (call.watchdog) { clearTimeout(call.watchdog); call.watchdog = null; }
@@ -1945,7 +2768,7 @@
     $('chatPanel').classList.remove('open');
 
     $('endedTime').textContent = fmtClock(seconds);
-    $('endedReason').textContent = reason || 'Call khatam.';
+    $('endedReason').textContent = reason || 'Call ended.';
     showScreen('ended');
     renderHome();
     // Back on the market (or not, depending on `searching`).
@@ -1956,22 +2779,35 @@
   function failCall(call, err) {
     if (state.call !== call) return;
     var name = String((err && err.name) || '');
-    var message = 'Mic permission nahi mili ya device busy hai.';
+    var message = 'Microphone permission was denied, or the device is busy.';
     if (name === 'NotAllowedError' || name === 'SecurityError') {
-      message = 'Mic permission block hai. Browser ki site settings se allow karein.';
+      message = 'Microphone permission is blocked. Allow it from your browser site settings.';
     } else if (name === 'NotFoundError' || name === 'OverconstrainedError') {
-      message = 'Koi microphone nahi mila.';
+      message = 'No microphone found.';
     } else if (name === 'NotReadableError') {
-      message = 'Mic kisi doosre app ne le rakha hai.';
+      message = 'Another app is already using the microphone.';
     } else if (name === 'unsupported') {
-      message = 'Is browser mein mic support nahi hai.';
+      message = 'This browser does not support the microphone.';
     }
     endCall(message, false);
   }
 
   function onPageHide() {
-    if (state.call) endCall('Page band ho gaya.', false);
+    if (state.call) endCall('The page was closed.', false);
     sayGoodbye();
+    /* Tell the admin table we are gone right now instead of waiting for the
+       heartbeat row to expire. sendBeacon survives the unload. */
+    stopServerBeat();
+    try {
+      var id = telegramId();
+      if (!state.isAdmin && id && navigator.sendBeacon) {
+        var blob = new Blob([JSON.stringify({
+          telegram_id: id, status: 'idle', gone: true, name: '', avatar: '', gender: null,
+          filter: null, peer_id: null, since: 0
+        })], { type: 'application/json' });
+        navigator.sendBeacon('/api/heartbeat', blob);
+      }
+    } catch (e) { /* ignore */ }
   }
 
   function elapsedSeconds(call) {
@@ -2063,7 +2899,7 @@
     var text = (input.value || '').trim();
     var call = state.call;
     if (!text) return;
-    if (!call) { toast('Chat ke liye pehle call chahiye'); return; }
+    if (!call) { toast('You need an active call to chat'); return; }
     publish(tInbox(call.peerId), {
       v: 2, t: 'chat', to: call.peerId, callId: call.callId, from: state.me.id, text: text.slice(0, 300)
     });
@@ -2078,8 +2914,8 @@
     if (!hint) return;
     if (!state.ready) { hint.textContent = ''; return; }
     hint.textContent = n > 0
-      ? n + ' log abhi free hain — match fast hoga'
-      : 'Abhi lobby khaali lag rahi hai — start dabayein, aap wait karenge';
+      ? n + ' people are free right now — matching will be fast'
+      : 'The lobby looks empty — tap start and you will wait for someone';
   }
 
   function renderHome() {
@@ -2090,28 +2926,44 @@
     var searching = state.searching;
     orb.classList.toggle('searching', searching);
     if (searching) {
-      // #orbText only exists in the idle branch, so the label is rendered here.
+      // The idle label is replaced entirely while searching/ringing.
       var ringing = Object.keys(state.invited).length > 0;
       orb.innerHTML = '<span class="spin"></span><span class="orb-label">'
         + (ringing ? 'Ringing…' : 'Searching…') + '</span>';
     } else {
-      orb.innerHTML = '<span class="glyph">🎧</span><span id="orbText">Tap to<br>start</span>';
+      orb.innerHTML = '<span class="glyph">🎧</span><span class="orb-label">Tap to<br>start</span>';
     }
 
     var primary = $('primaryBtn');
-    primary.textContent = searching ? 'Search cancel karein' : 'Start voice call';
+    primary.textContent = searching ? 'Cancel search' : 'Start voice call';
     primary.className = 'btn ' + (searching ? 'btn-ghost' : 'btn-primary');
 
     $('helper').textContent = searching
-      ? 'Aapke liye kisi ko dhoond rahe hain…'
-      : 'Mic on karke random insaan se awaaz mein baat karein';
+      ? 'Looking for someone for you…'
+      : 'Turn on your mic and talk to a random stranger';
 
     Array.prototype.forEach.call($('filterChips').children, function (chip) {
       var value = chip.getAttribute('data-f') || null;
       chip.setAttribute('aria-pressed', String(value === state.filter));
-      chip.disabled = searching;
+      /* Gender filtering is the paid feature. "Anyone" always works. */
+      var locked = !!value && !filterAllowed();
+      chip.disabled = searching || locked;
+      chip.classList.toggle('locked', locked);
     });
+    renderPaywallNote();
     renderOnline();
+  }
+
+  /* Small line under the filter chips explaining why they are greyed out, with
+     a button that opens the Stars invoice. Hidden entirely when free/unlocked. */
+  function renderPaywallNote() {
+    var note = $('payNote');
+    if (!note) return;
+    var locked = !filterAllowed();
+    note.classList.toggle('hidden', !locked);
+    if (locked) {
+      $('payText').textContent = 'Unlock the gender filter — ' + CONFIG.PRICE_STARS + ' Stars.';
+    }
   }
 
   function renderCall() {
@@ -2150,7 +3002,7 @@
     var livePeers = freePeers().filter(function (p) { return p.hits >= 2; });
     $('stAlive').textContent = livePeers.length + ' free / ' + Object.keys(state.peers).length + ' total';
     $('stId').textContent = state.me ? state.me.id.slice(0, 10) + '…' : '—';
-    $('stPeer').textContent = state.call ? (state.call.partner.name || 'Stranger') : 'Call par nahi';
+    $('stPeer').textContent = state.call ? (state.call.partner.name || 'Stranger') : 'Not in a call';
   }
 
   function syncSelfCard() {
@@ -2203,12 +3055,13 @@
     showScreen('home');
     renderHome();
     connectSignalling();
+    startServerBeat();
   }
 
   function onPrimary() {
     if (state.searching) { cancelSearch(); return; }
     if (!state.ready) {
-      setNotice($('homeNotice'), 'Signalling se connect nahi ho paya. Internet check karke dobara try karein.');
+      setNotice($('homeNotice'), 'Could not connect to signalling. Check your internet and try again.');
       connectSignalling();
       return;
     }
@@ -2217,7 +3070,7 @@
   }
 
   function nextPerson() {
-    if (state.call) endCall('Aapne next dabaya.', false);
+    if (state.call) endCall('You tapped Next person.', false);
     showScreen('home');
     renderHome();
     if (!state.ready) { connectSignalling(); return; }
@@ -2233,7 +3086,7 @@
     call.micOn = audio.enabled;
     renderCall();
     // Only claim "mute" — never fake a "Connected" we did not verify.
-    if (!call.micOn) setPeerStatus('Aapka mic mute hai');
+    if (!call.micOn) setPeerStatus('Your mic is muted');
     else setPeerStatus(call.connectedAt ? 'Connected' : 'Connecting…');
   }
 
@@ -2246,8 +3099,8 @@
     var audio = $('remoteAudio');
     if (audio) audio.muted = !call.speakerOn;
     renderCall();
-    if (!call.speakerOn) toast('Partner ki awaaz locally mute hai');
-    else toast('Speaker on — agar echo aaye to headphone use karein');
+    if (!call.speakerOn) toast('Your partner is muted locally');
+    else toast('Speaker on — use headphones if you hear an echo');
   }
 
   function saveLobby() {
@@ -2262,7 +3115,7 @@
     state.lobby = nextLobby;
     saveStored();
     closeSheets();
-    if (state.call) endCall('Lobby badal gayi.', false);
+    if (state.call) endCall('The lobby changed.', false);
     state.searching = false;
     clearTimeout(state.timers.invite);
     state.timers.invite = null;
@@ -2299,6 +3152,606 @@
     if (!state.me) return;
     state.gone = true;
     publish(tPresence(), { v: 2, id: state.me.id, bye: true, ts: now() }, { retain: true });
+  }
+
+  // ================================================================= admin
+  /* ------------------------------------------------------------------------
+   * The admin panel is part of the same file: vercel.json rewrites /admin to
+   * index.html, and boot() branches on location.pathname.
+   *
+   * ⚠️ SECURITY — NO CREDENTIALS LIVE IN THIS FILE
+   * There is no password here, hardcoded or otherwise. The ID and password are
+   * sent to /api/admin/login, which compares them against Vercel environment
+   * variables (ADMIN_ID, ADMIN_PASSWORD) on the server. Leaking this file — and
+   * on a static host it is always readable — therefore leaks nothing.
+   *
+   * A successful login returns a signed, expiring token that is kept in
+   * sessionStorage. Refresh keeps you in; closing the tab logs you out.
+   *
+   * Setup (Vercel → Settings → Environment Variables):
+   *   ADMIN_ID            e.g. "lc_ops_7f3a"  — not the guessable "admin"
+   *   ADMIN_PASSWORD      12+ random characters
+   *   ADMIN_TOKEN_SECRET  optional; rotating it kills every open session
+   *
+   * If those are missing the panel stays locked and the login screen says which
+   * variable is missing. It never falls back to a default password.
+   * --------------------------------------------------------------------- */
+  var ADMIN = {
+    TOKEN_KEY: 'linkcall.admin.token',
+    session: null,
+    token: '',
+    sortKey: 'reports',
+    sortOrder: 'desc',
+    users: [],
+    search: '',
+    callsBefore: 0,
+    timers: { live: null, stats: null },
+    busy: false
+  };
+
+  function adminPathActive() {
+    var p = String(location.pathname || '').replace(/\/+$/, '').toLowerCase();
+    var wanted = String(CONFIG.ADMIN_PATH || '/admin').replace(/\/+$/, '').toLowerCase();
+    return p === wanted || p === wanted + '/index.html';
+  }
+
+  function adminToken() {
+    if (ADMIN.token) return ADMIN.token;
+    try { ADMIN.token = sessionStorage.getItem(ADMIN.TOKEN_KEY) || ''; } catch (e) { ADMIN.token = ''; }
+    return ADMIN.token;
+  }
+
+  function saveAdminToken(token) {
+    ADMIN.token = token || '';
+    try {
+      if (token) sessionStorage.setItem(ADMIN.TOKEN_KEY, token);
+      else sessionStorage.removeItem(ADMIN.TOKEN_KEY);
+    } catch (e) { /* sessionStorage blocked */ }
+  }
+
+  function adminHeaders() {
+    var t = adminToken();
+    return t ? { Authorization: 'Bearer ' + t } : {};
+  }
+
+  function adminGet(path) {
+    return fetch(path, { method: 'GET', headers: Object.assign({ Accept: 'application/json' }, adminHeaders()) })
+      .then(function (r) {
+        if (r.status === 401) { adminLogout('Your session expired — please log in again.'); return null; }
+        return r.json();
+      })
+      .catch(function () { return { ok: false, offline: true }; });
+  }
+
+  function adminPost(path, body) {
+    return fetch(path, {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, adminHeaders()),
+      body: JSON.stringify(body || {})
+    }).then(function (r) {
+      if (r.status === 401) { adminLogout('Your session expired — please log in again.'); return null; }
+      return r.json();
+    }).catch(function () { return { ok: false, offline: true }; });
+  }
+
+  /* Login must NOT reuse adminPost: a 401 there means "wrong password", not
+     "session expired", and routing it through adminLogout() would clear the form
+     and hide the actual reason. This variant just parses the JSON. */
+  function adminLoginPost(path, body) {
+    return fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(body || {})
+    }).then(function (r) {
+      return r.json().catch(function () { return { ok: false, error: 'Could not read the server response.' }; });
+    }).catch(function () { return { ok: false, offline: true }; });
+  }
+
+  function adminShowError(text) {
+    var el = $('adminError');
+    if (!el) return;
+    el.textContent = text || '';
+    el.classList.toggle('hidden', !text);
+  }
+
+  /* Login is server-only by design. There is no local password check and no
+     fallback credential, so the panel cannot be opened by reading this file.
+     If the backend is unreachable the panel stays closed and says so. */
+  function adminLogin() {
+    var id = ($('adminId').value || '').trim();
+    var pass = $('adminPass').value || '';
+    if (!id || !pass) { adminShowError('Fill in both fields.'); return; }
+
+    var btn = $('adminLoginBtn');
+    btn.disabled = true;
+    adminShowError('');
+
+    adminLoginPost('/api/admin/login', { id: id, password: pass }).then(function (res) {
+      btn.disabled = false;
+
+      if (res && res.ok && res.token) {
+        saveAdminToken(res.token);
+        ADMIN.session = { id: id, mode: res.mode || 'env' };
+        adminEnter();
+        return;
+      }
+
+      if (res && res.offline) {
+        adminShowError('Could not reach the server. The /api routes are required for admin login — check that Vercel deployed them and that the environment variables are correct.');
+        return;
+      }
+
+      adminShowError((res && res.error) || 'Wrong admin ID or password.');
+    });
+  }
+
+  function adminEnter() {
+    state.isAdmin = true;
+    showScreen('admin');
+    $('adminLoginWrap').classList.add('hidden');
+    $('adminWrap').classList.remove('hidden');
+
+    $('adminEnvTag').textContent = 'LIVE';
+    $('adminSub').textContent = 'Login: ' + (ADMIN.session && ADMIN.session.id ? ADMIN.session.id : 'admin') +
+      ' · ' + new Date().toLocaleString();
+
+    adminRefreshAll();
+    adminStartTimers();
+  }
+
+  function adminLogout(message) {
+    saveAdminToken('');
+    ADMIN.session = null;
+    ADMIN.users = [];
+    ADMIN.callsBefore = 0;
+    adminStopTimers();
+    if (message) toast(message, true);
+    $('adminWrap').classList.add('hidden');
+    $('adminLoginWrap').classList.remove('hidden');
+    if ($('adminPass')) $('adminPass').value = '';
+    showScreen('admin');
+  }
+
+  function adminStartTimers() {
+    adminStopTimers();
+    ADMIN.timers.stats = setInterval(function () {
+      adminLoadStats();
+      adminLoadLive();
+    }, ADMIN_REFRESH_MS);
+    ADMIN.timers.live = setInterval(adminLoadUsers, ADMIN_REFRESH_MS * 4);
+  }
+
+  function adminStopTimers() {
+    if (ADMIN.timers.stats) clearInterval(ADMIN.timers.stats);
+    if (ADMIN.timers.live) clearInterval(ADMIN.timers.live);
+    ADMIN.timers.stats = null;
+    ADMIN.timers.live = null;
+  }
+
+  function adminRefreshAll() {
+    adminLoadStats();
+    adminLoadLive();
+    adminLoadUsers();
+    adminLoadCalls(true);
+    adminLoadLogs();
+  }
+
+  /* ------------------------------------------------------------- A. stats */
+  function adminLoadStats() {
+    return adminGet('/api/admin/stats').then(function (res) {
+      if (!res) return;
+      var offline = !res.ok || res.backend === 'offline';
+      $('adminCfgWarn').classList.toggle('hidden', !offline);
+
+      $('stTotalUsers').textContent = offline ? '—' : String(res.totalUsers || 0);
+      $('stOnline').textContent = offline ? '—' : String(res.onlineNow || 0);
+      $('stWaiting').textContent = offline ? '—' : String(res.waiting || 0);
+      $('stInCall').textContent = offline ? '—' : String(res.inCall || 0);
+      $('stCallsToday').textContent = offline ? '—' : String(res.callsToday || 0);
+      $('stRevenue').textContent = offline ? '—' : String(res.revenueToday || 0) + ' ⭐';
+      $('stReportsToday').textContent = offline ? '—' : String(res.reportsToday || 0);
+
+      adminRenderPayment(!!res.paymentRequired, offline);
+    });
+  }
+
+  function adminRenderPayment(required, offline) {
+    var toggle = $('payToggle');
+    var name = $('payName');
+    var stateEl = $('payState');
+    toggle.checked = required;
+    toggle.disabled = !!offline;
+    name.textContent = 'Gender Matching — ' + (required ? 'Paid (Stars)' : 'Free');
+    stateEl.textContent = offline
+      ? 'Backend offline — the setting cannot be changed.'
+      : (required
+        ? 'Users must pay ' + CONFIG.PRICE_STARS + ' Stars to use the filter.'
+        : 'Every user gets the filter for free.');
+  }
+
+  function adminTogglePayment(checked) {
+    if (ADMIN.busy) return;
+    ADMIN.busy = true;
+    $('payToggle').disabled = true;
+    adminPost('/api/admin/toggle-payment', { required: !!checked }).then(function (res) {
+      ADMIN.busy = false;
+      $('payToggle').disabled = false;
+      if (!res || res.ok === false) {
+        toast((res && res.error) || 'Could not save the toggle.', true);
+        $('payToggle').checked = !checked;
+        return;
+      }
+      adminRenderPayment(!!res.required, false);
+      toast('Gender Matching is now ' + (res.required ? 'PAID' : 'FREE') + '.');
+      adminLoadLogs();
+    });
+  }
+
+  /* -------------------------------------------------------------- C/D. live */
+  function adminLoadLive() {
+    return adminGet('/api/admin/live').then(function (res) {
+      if (!res) return;
+      var waiting = (res.waiting || []);
+      var calls = (res.calls || []);
+
+      $('waitCount').textContent = String(waiting.length);
+      $('callCount').textContent = String(calls.length);
+
+      var wb = $('waitBody');
+      if (!waiting.length) {
+        wb.innerHTML = '<tr><td colspan="6" class="a-empty">Nobody is waiting.</td></tr>';
+      } else {
+        wb.innerHTML = waiting.map(function (w) {
+          return '<tr class="' + (w.reportCount > 0 ? 'hot' : '') + '">' +
+            '<td class="num">' + esc(w.id) + '</td>' +
+            '<td>' + esc(w.name || '—') + '</td>' +
+            '<td>' + genderPill(w.gender) + '</td>' +
+            '<td>' + filterText(w.filter) + '</td>' +
+            '<td class="num">' + w.waitingSec + '</td>' +
+            '<td class="num">' + reportBadge(w.reportCount) + '</td>' +
+            '</tr>';
+        }).join('');
+      }
+
+      var cb = $('liveCallBody');
+      if (!calls.length) {
+        cb.innerHTML = '<tr><td colspan="5" class="a-empty">No active calls.</td></tr>';
+      } else {
+        cb.innerHTML = calls.map(function (c) {
+          return '<tr>' +
+            '<td><code>' + esc(String(c.callId).slice(0, 10)) + '…</code></td>' +
+            '<td>' + userCell(c.userA, c.nameA) + '</td>' +
+            '<td>' + userCell(c.userB, c.nameB) + '</td>' +
+            '<td class="num">' + fmtClock(c.durationSec) + '</td>' +
+            '<td class="num">' + (c.startedAtMs ? timeAgo(c.startedAtMs) : '—') + '</td>' +
+            '</tr>';
+        }).join('');
+      }
+    });
+  }
+
+  /* ------------------------------------------------------- E. user registry */
+  function adminLoadUsers() {
+    var query = '/api/admin/users?sort=' + encodeURIComponent(ADMIN.sortKey) +
+      '&order=' + encodeURIComponent(ADMIN.sortOrder) +
+      (ADMIN.search ? '&q=' + encodeURIComponent(ADMIN.search) : '');
+    return adminGet(query).then(function (res) {
+      if (!res) return;
+      ADMIN.users = res.users || [];
+      $('userCount').textContent = String(res.total || ADMIN.users.length);
+      adminRenderUsers();
+      adminRenderSortHeaders();
+    });
+  }
+
+  function adminRenderSortHeaders() {
+    Array.prototype.forEach.call(document.querySelectorAll('#userTable th[data-sort]'), function (th) {
+      var key = th.getAttribute('data-sort');
+      if (key !== ADMIN.sortKey) { th.removeAttribute('aria-sort'); return; }
+      th.setAttribute('aria-sort', ADMIN.sortOrder === 'asc' ? 'ascending' : 'descending');
+    });
+  }
+
+  function adminRenderUsers() {
+    var body = $('userBody');
+    if (!ADMIN.users.length) {
+      body.innerHTML = '<tr><td colspan="10" class="a-empty">No matching users.</td></tr>';
+      return;
+    }
+    body.innerHTML = ADMIN.users.map(function (u) {
+      var statusPill = u.banned
+        ? '<span class="pill bad">Banned</span>'
+        : '<span class="pill ok">Active</span>';
+      var payPill = u.paid
+        ? '<span class="pill warn">paid</span>'
+        : (u.unlocked ? '<span class="pill mute">unlocked</span>' : '<span class="pill mute">free</span>');
+      return '<tr class="clickable' + (u.reportCount > 0 ? ' hot' : '') + '" data-uid="' + esc(u.id) + '">' +
+        '<td class="num">' + reportBadge(u.reportCount) + '</td>' +
+        '<td>' + statusPill + '</td>' +
+        '<td class="num">' + esc(u.id) + '</td>' +
+        '<td>' + esc(u.name || '—') + '</td>' +
+        '<td class="num">' + (u.firstSeen ? shortDate(u.firstSeen) : '—') + '</td>' +
+        '<td class="num">' + (u.lastSeen ? timeAgo(u.lastSeen) : '—') + '</td>' +
+        '<td>' + payPill + '</td>' +
+        '<td class="num">' + u.totalCalls + '</td>' +
+        '<td class="num">' + u.totalMinutes + '</td>' +
+        '<td><div class="a-actions">' +
+          (u.banned
+            ? '<button class="btn-sm good" data-act="unban" data-uid="' + esc(u.id) + '" type="button">Unban</button>'
+            : '<button class="btn-sm danger" data-act="ban" data-uid="' + esc(u.id) + '" type="button">Ban</button>') +
+          (u.unlocked
+            ? '<button class="btn-sm" data-act="lock" data-uid="' + esc(u.id) + '" type="button">Lock</button>'
+            : '<button class="btn-sm" data-act="unlock" data-uid="' + esc(u.id) + '" type="button">Unlock</button>') +
+        '</div></td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  function adminSortBy(key) {
+    if (ADMIN.sortKey === key) {
+      ADMIN.sortOrder = ADMIN.sortOrder === 'desc' ? 'asc' : 'desc';
+    } else {
+      ADMIN.sortKey = key;
+      /* Anything that reads best "biggest first" defaults to desc. */
+      ADMIN.sortOrder = (key === 'name' || key === 'id' || key === 'firstSeen') ? 'asc' : 'desc';
+    }
+    adminLoadUsers();
+  }
+
+  /* --------------------------------------------------------- F. user detail */
+  function adminOpenUser(id) {
+    if (!id) return;
+    $('userSheetTitle').textContent = 'User ' + id;
+    $('userMeta').innerHTML = '<dt>Loading…</dt><dd></dd>';
+    $('userReports').innerHTML = '';
+    $('userCallBody').innerHTML = '';
+    $('userSheetActions').innerHTML = '';
+    openSheet('userSheet');
+
+    adminGet('/api/admin/user/' + encodeURIComponent(id)).then(function (res) {
+      if (!res) return;
+      if (!res.ok || !res.user) {
+        $('userMeta').innerHTML = '<dt>Error</dt><dd>' + esc((res && res.error) || 'User not found.') + '</dd>';
+        return;
+      }
+      var u = res.user;
+
+      $('userMeta').innerHTML =
+        '<dt>Name</dt><dd>' + esc(u.name || '—') + '</dd>' +
+        '<dt>Status</dt><dd>' + (u.banned ? '<span class="pill bad">Banned</span>' : '<span class="pill ok">Active</span>') + '</dd>' +
+        '<dt>Payment</dt><dd>' + (u.paid ? '<span class="pill warn">paid ' + (u.paidStars || 0) + '⭐</span>' : (u.unlocked ? 'unlocked' : 'free')) + '</dd>' +
+        '<dt>Reports</dt><dd>' + reportBadge(u.reportCount) + '</dd>' +
+        '<dt>Calls</dt><dd>' + u.totalCalls + ' (' + u.totalMinutes + ' min)</dd>' +
+        '<dt>First seen</dt><dd>' + (u.firstSeen ? fullDate(u.firstSeen) : '—') + '</dd>' +
+        '<dt>Last seen</dt><dd>' + (u.lastSeen ? fullDate(u.lastSeen) : '—') + '</dd>';
+
+      $('userSheetActions').innerHTML =
+        (u.banned
+          ? '<button class="btn-sm good" data-act="unban" data-uid="' + esc(u.id) + '" type="button">Unban</button>'
+          : '<button class="btn-sm danger" data-act="ban" data-uid="' + esc(u.id) + '" type="button">Ban this user</button>') +
+        '<button class="btn-sm" data-act="dismiss-reports" data-uid="' + esc(u.id) + '" type="button">Dismiss all reports</button>';
+
+      var reports = res.reports || [];
+      $('userReports').innerHTML = reports.length ? reports.map(function (r) {
+        return '<div class="rpt-item">' +
+          '<div class="rpt-line"><span class="rpt-reason">' + esc(r.reason || 'other') + '</span>' +
+          '<span class="rpt-meta">' + fullDate(r.timestamp) + '</span></div>' +
+          (r.note ? '<div class="rpt-note">' + esc(r.note) + '</div>' : '') +
+          '<div class="rpt-meta">Reporter: ' + esc(r.reporter_id || '—') +
+          (r.reporter_name ? ' (' + esc(r.reporter_name) + ')' : '') +
+          (r.call_id ? ' · call ' + esc(String(r.call_id).slice(0, 8)) : '') + '</div>' +
+          '</div>';
+      }).join('') : '<p class="hint">No reports.</p>';
+
+      var calls = res.calls || [];
+      $('userCallBody').innerHTML = calls.length ? calls.map(function (c) {
+        return '<tr>' +
+          '<td class="num">' + (c.startMs ? shortDate(c.startMs) : '—') + '</td>' +
+          '<td>' + esc(c.partner || '—') + (c.partnerName ? ' · ' + esc(c.partnerName) : '') + '</td>' +
+          '<td class="num">' + fmtClock(c.duration) + '</td>' +
+          '</tr>';
+      }).join('') : '<tr><td colspan="3" class="a-empty">No call history.</td></tr>';
+    });
+  }
+
+  /* ------------------------------------------------------ G. call history */
+  function adminLoadCalls(reset) {
+    var before = reset ? 0 : ADMIN.callsBefore;
+    var url = '/api/admin/calls?limit=50' + (before ? '&before=' + before : '');
+    return adminGet(url).then(function (res) {
+      if (!res) return;
+      var rows = res.calls || [];
+      ADMIN.callsBefore = res.nextBefore || 0;
+
+      var body = $('histBody');
+      if (!rows.length) {
+        body.innerHTML = '<tr><td colspan="6" class="a-empty">No call history.</td></tr>';
+        return;
+      }
+      body.innerHTML = rows.map(function (c) {
+        return '<tr>' +
+          '<td><code>' + esc(String(c.callId).slice(0, 10)) + '…</code></td>' +
+          '<td>' + userCell(c.userA, c.nameA) + '</td>' +
+          '<td>' + userCell(c.userB, c.nameB) + '</td>' +
+          '<td class="num">' + (c.startMs ? shortDate(c.startMs) : '—') + '</td>' +
+          '<td class="num">' + (c.startMs ? shortDate(c.startMs + c.duration * 1000) : '—') + '</td>' +
+          '<td class="num">' + fmtClock(c.duration) + '</td>' +
+          '</tr>';
+      }).join('');
+    });
+  }
+
+  /* ------------------------------------------------------------ I. logs */
+  function adminLoadLogs() {
+    return adminGet('/api/admin/logs?limit=50').then(function (res) {
+      if (!res) return;
+      var logs = res.logs || [];
+      $('logCount').textContent = String(logs.length);
+      var body = $('logBody');
+      if (!logs.length) {
+        body.innerHTML = '<tr><td colspan="4" class="a-empty">No admin actions yet.</td></tr>';
+        return;
+      }
+      body.innerHTML = logs.map(function (l) {
+        return '<tr>' +
+          '<td class="num">' + (l.at ? shortDate(l.at) : '—') + '</td>' +
+          '<td><span class="pill mute">' + esc(l.action) + '</span></td>' +
+          '<td class="num">' + esc(l.target || '—') + '</td>' +
+          '<td>' + esc(l.details || '') + '</td>' +
+          '</tr>';
+      }).join('');
+    });
+  }
+
+  /* --------------------------------------------------- H. user actions */
+  function adminUserAction(id, action) {
+    if (!id || !action) return;
+    if (action === 'ban' && !confirm('Ban user ' + id + '? They will be disconnected immediately.')) return;
+    if (action === 'dismiss-reports' && !confirm('Dismiss all reports?')) return;
+
+    adminPost('/api/admin/user-action', { telegram_id: id, action: action }).then(function (res) {
+      if (!res || res.ok === false) {
+        toast((res && res.error) || 'The action failed.', true);
+        return;
+      }
+      var labels = {
+        ban: 'Banned', unban: 'Unbanned', unlock: 'Unlocked',
+        lock: 'Locked', 'dismiss-reports': 'Reports dismissed'
+      };
+      toast((labels[action] || action) + ' — ' + id);
+      adminLoadUsers();
+      adminLoadLive();
+      adminLoadLogs();
+      if ($('userSheet').classList.contains('open')) adminOpenUser(id);
+    });
+  }
+
+  /* ------------------------------------------------------------ helpers */
+  function esc(value) {
+    return String(value === undefined || value === null ? '' : value)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function reportBadge(n) {
+    var v = Number(n) || 0;
+    if (!v) return '<span class="pill mute">0</span>';
+    if (v >= 5) return '<span class="pill bad">' + v + '</span>';
+    return '<span class="pill warn">' + v + '</span>';
+  }
+
+  function genderPill(g) {
+    if (g === 'male') return '<span class="pill male">M</span>';
+    if (g === 'female') return '<span class="pill female">F</span>';
+    return '<span class="pill mute">—</span>';
+  }
+
+  function filterText(f) {
+    if (f === 'male') return 'Male';
+    if (f === 'female') return 'Female';
+    return 'Anyone';
+  }
+
+  function userCell(id, name) {
+    if (!id) return '—';
+    return '<span class="num">' + esc(id) + '</span>' +
+      (name ? '<br><span class="rpt-meta">' + esc(name) + '</span>' : '');
+  }
+
+  function shortDate(ms) {
+    if (!ms) return '—';
+    var d = new Date(ms);
+    if (isNaN(d.getTime())) return '—';
+    var pad = function (n) { return n < 10 ? '0' + n : String(n); };
+    return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + ' ' +
+      pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+
+  function fullDate(ms) {
+    if (!ms) return '—';
+    var d = new Date(ms);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleString();
+  }
+
+  function timeAgo(ms) {
+    var diff = Math.max(0, Math.round((now() - ms) / 1000));
+    if (diff < 10) return 'just now';
+    if (diff < 60) return diff + 's ago';
+    if (diff < 3600) return Math.round(diff / 60) + 'm ago';
+    if (diff < 86400) return Math.round(diff / 3600) + 'h ago';
+    return Math.round(diff / 86400) + 'd ago';
+  }
+
+  function bindAdminEvents() {
+    $('adminLoginBtn').addEventListener('click', adminLogin);
+    $('adminPass').addEventListener('keydown', function (e) { if (e.key === 'Enter') adminLogin(); });
+    $('adminId').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('adminPass').focus(); });
+    $('adminLogout').addEventListener('click', function () { adminLogout(); });
+
+    $('payToggle').addEventListener('change', function () { adminTogglePayment(this.checked); });
+
+    $('userRefresh').addEventListener('click', function () { ADMIN.search = ''; $('userSearch').value = ''; adminLoadUsers(); });
+
+    var searchTimer = null;
+    $('userSearch').addEventListener('input', function () {
+      var value = this.value || '';
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(function () {
+        ADMIN.search = value.trim();
+        adminLoadUsers();
+      }, 280);
+    });
+
+    $('userTable').querySelector('thead').addEventListener('click', function (e) {
+      var th = e.target.closest('th[data-sort]');
+      if (th) adminSortBy(th.getAttribute('data-sort'));
+    });
+
+    /* Delegated: rows open the detail sheet, buttons act on the user. Both live
+       in cells that are re-rendered on every poll, so binding per-row would leak. */
+    document.addEventListener('click', function (e) {
+      var act = e.target.closest('[data-act]');
+      if (act) {
+        e.stopPropagation();
+        adminUserAction(act.getAttribute('data-uid'), act.getAttribute('data-act'));
+        return;
+      }
+      var row = e.target.closest('#userBody tr[data-uid]');
+      if (row) { adminOpenUser(row.getAttribute('data-uid')); return; }
+    });
+
+    $('callsPrev').addEventListener('click', function () { ADMIN.callsBefore = 0; adminLoadCalls(true); });
+    $('callsNext').addEventListener('click', function () { adminLoadCalls(false); });
+  }
+
+  function adminBoot() {
+    state.isAdmin = true;
+    document.body.classList.add('admin-mode');
+    showScreen('admin');
+    $('blocker').classList.remove('open');
+    bindAdminEvents();
+
+    /* bindEvents() (which normally installs these) never runs in admin mode, so
+       the detail sheet would have no way to close without them. */
+    Array.prototype.forEach.call(document.querySelectorAll('[data-close-sheet]'), function (btn) {
+      btn.addEventListener('click', closeSheets);
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.sheet-wrap'), function (wrap) {
+      wrap.addEventListener('click', function (e) { if (e.target === wrap) closeSheets(); });
+    });
+
+    /* A token in sessionStorage only means "this tab logged in recently". It is
+       still verified by the server on the first request: an expired or tampered
+       token makes every admin route answer 401, which triggers adminLogout(). */
+    if (adminToken()) {
+      ADMIN.session = { id: '', mode: 'session' };
+      adminEnter();
+    } else {
+      $('adminLoginWrap').classList.remove('hidden');
+      $('adminWrap').classList.add('hidden');
+      setTimeout(function () { var el = $('adminId'); if (el) el.focus(); }, 250);
+    }
   }
 
   // ================================================================= events
@@ -2357,7 +3810,7 @@
       wrap.addEventListener('click', function (e) { if (e.target === wrap) closeSheets(); });
     });
 
-    $('endBtn').addEventListener('click', function () { endCall('Aapne call end ki.', false); });
+    $('endBtn').addEventListener('click', function () { endCall('You ended the call.', false); });
     $('nextBtn').addEventListener('click', nextPerson);
     $('micBtn').addEventListener('click', toggleMic);
     $('speakerBtn').addEventListener('click', toggleSpeaker);
@@ -2368,6 +3821,10 @@
     });
     $('chatSend').addEventListener('click', sendChat);
     $('chatInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') sendChat(); });
+
+    $('reportBtn').addEventListener('click', openReportSheet);
+    $('reportSend').addEventListener('click', submitReport);
+    $('payBtn').addEventListener('click', unlockFilter);
 
     $('endedHome').addEventListener('click', function () {
       showScreen('home');
@@ -2425,12 +3882,20 @@
   }
 
   function boot() {
+    /* /admin is the same file, reached through a vercel.json rewrite. Nothing
+       else about the app boots in that mode: no MQTT, no mic, no heartbeat. */
+    if (adminPathActive()) { adminBoot(); return; }
+
     bindEvents();
     tgInit();
 
+    /* Kick off the backend checks in the background. They must never block the
+       UI: a static-only deploy has no /api at all and must still work. */
+    loadAccess();
+
     var supported = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.RTCPeerConnection);
     if (!supported) {
-      $('onboardError').textContent = 'Ye browser audio call support nahi karta. Chrome/Safari ka naya version use karein. Note: page HTTPS par hona chahiye.';
+      $('onboardError').textContent = 'This browser does not support audio calls. Please use a recent version of Chrome or Safari. Note: the page must be served over HTTPS.';
       $('onboardError').classList.remove('hidden');
       $('startBtn').disabled = true;
       return;
@@ -2450,6 +3915,7 @@
       showScreen('home');
       renderHome();
       connectSignalling();
+      startServerBeat();
       if (urlLobby) toast('Lobby: ' + urlLobby);
     } else {
       state.lobby = urlLobby || CONFIG.LOBBY;
