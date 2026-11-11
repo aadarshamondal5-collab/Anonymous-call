@@ -1,0 +1,17 @@
+# secrets — never commit
+.env
+.env.local
+.env.*.local
+*.pem
+serviceAccount.json
+*-service-account*.json
+
+# deps / build output
+node_modules/
+.vercel/
+dist/
+build/
+
+# os noise
+.DS_Store
+Thumbs.db
