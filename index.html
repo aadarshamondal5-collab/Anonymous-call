@@ -1187,7 +1187,8 @@
         <button class="btn btn-primary spaced-top" id="adminLoginBtn" type="button">Login</button>
         <p class="hint legal-note">
           Admin credentials are provided through Vercel environment variables
-          (ADMIN_ID and ADMIN_PASSWORD). Nothing is hardcoded in this file.
+          (<code>LC_BOSS_LOGIN_USER_12</code> and <code>LC_BOSS_LOGIN_PASS_88</code>).
+          Nothing is hardcoded in this file.
         </p>
       </div>
     </div>
@@ -1206,7 +1207,7 @@
       <div class="a-notice danger" id="adminCfgWarn">
         <strong>Backend not connected.</strong> Firebase environment variables are missing or the API
         routes were not deployed. Every number below stays empty until
-        <code>FIREBASE_SERVICE_ACCOUNT</code> is set.
+        <code>LC_FIREBASE_CRED_JSON_33</code> is set.
       </div>
 
       <div class="a-tabs" id="adminTabs" role="tablist" aria-label="Admin sections">
@@ -1579,7 +1580,7 @@
 
   // ------------------------------------------------------- backend (Firebase)
   /* Everything here is optional: if the API routes are not deployed, or
-     FIREBASE_SERVICE_ACCOUNT is missing, every function fails soft and the app
+     LC_FIREBASE_CRED_JSON_33 is missing, every function fails soft and the app
      keeps working as a pure peer-to-peer client. That keeps the single-file
      promise intact — the backend only adds admin/moderation.
 
@@ -3391,16 +3392,18 @@
    * ⚠️ SECURITY — NO CREDENTIALS LIVE IN THIS FILE
    * There is no password here, hardcoded or otherwise. The ID and password are
    * sent to /api/admin/login, which compares them against Vercel environment
-   * variables (ADMIN_ID, ADMIN_PASSWORD) on the server. Leaking this file — and
-   * on a static host it is always readable — therefore leaks nothing.
+   * variables (LC_BOSS_LOGIN_USER_12, LC_BOSS_LOGIN_PASS_88) on the server.
+   * Leaking this file — and on a static host it is always readable — therefore
+   * leaks nothing.
    *
    * A successful login returns a signed, expiring token that is kept in
    * sessionStorage. Refresh keeps you in; closing the tab logs you out.
    *
    * Setup (Vercel → Settings → Environment Variables):
-   *   ADMIN_ID            e.g. "lc_ops_7f3a"  — not the guessable "admin"
-   *   ADMIN_PASSWORD      12+ random characters
-   *   ADMIN_TOKEN_SECRET  optional; rotating it kills every open session
+   *   LC_BOSS_LOGIN_USER_12   admin username, e.g. "lc_ops_7f3a"
+   *                           — not the guessable "admin"
+   *   LC_BOSS_LOGIN_PASS_88   12+ random characters
+   *   LC_BOSS_TOKEN_KEY_55    optional; rotating it kills every open session
    *
    * If those are missing the panel stays locked and the login screen says which
    * variable is missing. It never falls back to a default password.
