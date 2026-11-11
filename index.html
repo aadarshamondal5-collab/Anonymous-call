@@ -781,6 +781,62 @@
   .admin-login { max-width: 420px; width: 100%; margin: 0 auto; }
   .admin-login .card { margin-top: 28px; }
 
+  /* ---- admin tabs -------------------------------------------------------
+     The panel is a phone-first single page, so the tab strip scrolls sideways
+     instead of wrapping into two rows that push the content down. Depth is
+     faked with the same shadow/inset recipe as every other surface. */
+  .a-tabs {
+    display: flex; gap: 6px; padding: 5px; overflow-x: auto;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none;
+    border-radius: var(--r-pill); border: 1px solid var(--border);
+    background: linear-gradient(180deg, rgba(12, 11, 20, .90), rgba(28, 26, 44, .80));
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, .62), 0 1px 0 rgba(255, 255, 255, .05);
+  }
+  .a-tabs::-webkit-scrollbar { display: none; }
+  .a-tab-btn {
+    flex: none; padding: 9px 16px; border-radius: var(--r-pill);
+    font-size: 12px; font-weight: 800; letter-spacing: .2px;
+    color: var(--muted); white-space: nowrap;
+    border: 1px solid transparent;
+    transition: color .15s, background .15s, box-shadow .15s;
+  }
+  .a-tab-btn:hover { color: var(--text); }
+  /* The panel is reachable by keyboard; give the tab strip a visible ring
+     without touching the rest of the page's focus styling. */
+  .a-tab-btn:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+  .a-tab-btn[aria-selected="true"] {
+    color: var(--primary-ink);
+    background: linear-gradient(180deg, var(--primary), var(--primary-2));
+    border-color: rgba(255, 212, 0, .70);
+    /* A raised key on a recessed tray: the single strongest depth cue here. */
+    box-shadow: 0 3px 10px rgba(255, 159, 28, .35), inset 0 1px 0 rgba(255, 255, 255, .55),
+                inset 0 -2px 0 rgba(0, 0, 0, .18);
+  }
+  .a-tab-btn .a-tab-n {
+    display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: var(--r-pill);
+    font-size: 10px; background: rgba(0, 0, 0, .22);
+  }
+  .a-tab-btn[aria-selected="true"] .a-tab-n { background: rgba(0, 0, 0, .25); color: var(--primary); }
+
+  /* A pane is hidden with [hidden] plus .hidden; display:flex below would
+     otherwise win over the attribute. */
+  .a-pane { display: none; flex-direction: column; gap: 16px; }
+  .a-pane.on { display: flex; }
+
+  /* ---- settings pane controls ---- */
+  .set-row { display: flex; flex-direction: column; gap: 8px; }
+  .set-inline { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+  .set-inline .input { flex: 1 1 200px; width: auto; }
+  .set-inline .btn-sm { padding: 12px 18px; font-size: 12px; }
+  .set-help { font-size: 11px; color: var(--muted); line-height: 1.5; margin: 0; }
+  .set-value {
+    display: inline-block; font-size: 12px; font-weight: 800; color: var(--primary);
+    font-variant-numeric: tabular-nums;
+  }
+
   .dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 12px; }
   .dl dt { color: var(--muted); }
   .dl dd { margin: 0; word-break: break-word; }
@@ -958,6 +1014,9 @@
       </p>
     </div>
     <button class="btn btn-primary" id="primaryBtn" type="button">Start voice call</button>
+    <button class="btn btn-ghost hidden" id="channelBtn" type="button">
+      <span aria-hidden="true">📢</span> Join our Channel
+    </button>
     <button class="btn btn-ghost" id="shareBtn" type="button">
       <span aria-hidden="true">📤</span> Invite your friends
     </button>
@@ -1150,37 +1209,98 @@
         <code>FIREBASE_SERVICE_ACCOUNT</code> is set.
       </div>
 
-      <div class="stat-grid" id="statGrid">
-        <div class="stat-card"><span class="stat-k">Total users</span><span class="stat-v" id="stTotalUsers">—</span></div>
-        <div class="stat-card good"><span class="stat-k">Online now</span><span class="stat-v" id="stOnline">—</span></div>
-        <div class="stat-card"><span class="stat-k">Waiting</span><span class="stat-v" id="stWaiting">—</span></div>
-        <div class="stat-card"><span class="stat-k">In call</span><span class="stat-v" id="stInCall">—</span></div>
-        <div class="stat-card"><span class="stat-k">Calls today</span><span class="stat-v" id="stCallsToday">—</span></div>
-        <div class="stat-card pay"><span class="stat-k">Revenue (Stars)</span><span class="stat-v" id="stRevenue">—</span></div>
-        <div class="stat-card warn"><span class="stat-k">Reports today</span><span class="stat-v" id="stReportsToday">—</span></div>
+      <div class="a-tabs" id="adminTabs" role="tablist" aria-label="Admin sections">
+        <button class="a-tab-btn" id="tabOverview" data-tab="overview" role="tab" aria-selected="true" type="button">Overview</button>
+        <button class="a-tab-btn" id="tabSettings" data-tab="settings" role="tab" aria-selected="false" type="button">Settings</button>
+        <button class="a-tab-btn" id="tabLive" data-tab="live" role="tab" aria-selected="false" type="button">Live <span class="a-tab-n" id="tabLiveN">0</span></button>
+        <button class="a-tab-btn" id="tabUsers" data-tab="users" role="tab" aria-selected="false" type="button">Users <span class="a-tab-n" id="tabUsersN">0</span></button>
+        <button class="a-tab-btn" id="tabLogs" data-tab="logs" role="tab" aria-selected="false" type="button">Logs</button>
       </div>
 
-      <!-- B. payment toggle -->
-      <div class="a-sec">
-        <div class="a-sec-head">
-          <div>
-            <h2 class="a-sec-title">Gender Matching</h2>
-            <p class="a-sec-sub">Free = everyone gets the filter. Paid = 50 Stars to unlock it.</p>
-          </div>
-        </div>
-        <div class="toggle-row">
-          <div class="toggle-info">
-            <p class="toggle-name" id="payName">Loading…</p>
-            <p class="toggle-state" id="payState">Reading the setting from the server…</p>
-          </div>
-          <label class="switch" aria-label="Gender matching paid toggle">
-            <input type="checkbox" id="payToggle">
-            <span class="track"></span>
-            <span class="knob"></span>
-          </label>
+      <div class="a-pane on" id="paneOverview" role="tabpanel" aria-labelledby="tabOverview">
+        <div class="stat-grid" id="statGrid">
+          <div class="stat-card"><span class="stat-k">Total users</span><span class="stat-v" id="stTotalUsers">—</span></div>
+          <div class="stat-card good"><span class="stat-k">Online now</span><span class="stat-v" id="stOnline">—</span></div>
+          <div class="stat-card"><span class="stat-k">Waiting</span><span class="stat-v" id="stWaiting">—</span></div>
+          <div class="stat-card"><span class="stat-k">In call</span><span class="stat-v" id="stInCall">—</span></div>
+          <div class="stat-card"><span class="stat-k">Calls today</span><span class="stat-v" id="stCallsToday">—</span></div>
+          <div class="stat-card pay"><span class="stat-k">Revenue (Stars)</span><span class="stat-v" id="stRevenue">—</span></div>
+          <div class="stat-card warn"><span class="stat-k">Reports today</span><span class="stat-v" id="stReportsToday">—</span></div>
         </div>
       </div>
 
+      <div class="a-pane" id="paneSettings" role="tabpanel" aria-labelledby="tabSettings">
+        <div class="a-sec">
+          <div class="a-sec-head">
+            <div>
+              <h2 class="a-sec-title">Gender Matching access</h2>
+              <p class="a-sec-sub">Controls whether the gender filter is free for everyone or sold for Stars.</p>
+            </div>
+          </div>
+          <div class="toggle-row">
+            <div class="toggle-info">
+              <p class="toggle-name" id="payName">Loading…</p>
+              <p class="toggle-state" id="payState">Reading the setting from the server…</p>
+            </div>
+            <label class="switch" aria-label="Gender matching paid toggle">
+              <input type="checkbox" id="payToggle">
+              <span class="track"></span>
+              <span class="knob"></span>
+            </label>
+          </div>
+          <p class="set-help">
+            Free means every user can pick "Male" or "Female" without paying.
+            Paid shows each user the unlock sheet at the price set below.
+          </p>
+        </div>
+
+        <div class="a-sec">
+          <div class="a-sec-head">
+            <div>
+              <h2 class="a-sec-title">Unlock price</h2>
+              <p class="a-sec-sub">Charged once per user, in Telegram Stars (XTR).</p>
+            </div>
+            <span class="set-value" id="setPriceNow">—</span>
+          </div>
+          <div class="set-row">
+            <div class="set-inline">
+              <input class="input" id="setPriceInput" type="number" inputmode="numeric"
+                     min="1" max="10000" step="1" placeholder="50" autocomplete="off">
+              <button class="btn-sm" id="setPriceSave" type="button">Save Price</button>
+            </div>
+            <p class="set-help">
+              Whole Stars between 1 and 10000. The unlock button and the invoice
+              both read this value, so a change applies to the very next user.
+            </p>
+            <p class="error hidden" id="setPriceErr"></p>
+          </div>
+        </div>
+
+        <div class="a-sec">
+          <div class="a-sec-head">
+            <div>
+              <h2 class="a-sec-title">Channel link</h2>
+              <p class="a-sec-sub">Shown on the home screen as "Join our Channel".</p>
+            </div>
+          </div>
+          <div class="set-row">
+            <div class="set-inline">
+              <input class="input" id="setChannelInput" type="url" inputmode="url"
+                     placeholder="https://t.me/yourchannel" spellcheck="false" autocomplete="off">
+              <button class="btn-sm" id="setChannelSave" type="button">Save Link</button>
+            </div>
+            <p class="set-help">
+              Must start with http:// or https://. Leave it empty to hide the
+              channel button completely.
+            </p>
+            <p class="error hidden" id="setChannelErr"></p>
+          </div>
+        </div>
+
+        <div class="a-notice hidden" id="setSaved">Settings saved.</div>
+      </div>
+
+      <div class="a-pane" id="paneLive" role="tabpanel" aria-labelledby="tabLive">
       <!-- C. live waiting -->
       <div class="a-sec">
         <div class="a-sec-head">
@@ -1217,7 +1337,9 @@
           </table>
         </div>
       </div>
+      </div>
 
+      <div class="a-pane" id="paneUsers" role="tabpanel" aria-labelledby="tabUsers">
       <!-- E. user registry -->
       <div class="a-sec">
         <div class="a-sec-head">
@@ -1249,7 +1371,9 @@
           </table>
         </div>
       </div>
+      </div>
 
+      <div class="a-pane" id="paneLogs" role="tabpanel" aria-labelledby="tabLogs">
       <!-- G. call history -->
       <div class="a-sec">
         <div class="a-sec-head">
@@ -1283,6 +1407,7 @@
             <tbody id="logBody"></tbody>
           </table>
         </div>
+      </div>
       </div>
     </div>
   </div>
@@ -1340,9 +1465,15 @@
     /* Admin panel path. Opened at https://your-app/admin (a Vercel rewrite in
        vercel.json serves this same file there). Change it to hide it further. */
     ADMIN_PATH: '/admin',
-    /* Stars price for Gender Matching. Display only — the real price is set when
-       the invoice is created (see README, "Stars payment"). */
-    PRICE_STARS: 50
+    /* ---- FALLBACKS ONLY ---------------------------------------------------
+       The live values come from GET /api/config, which reads config/app in
+       Firestore. The admin panel writes that document, so the price, the
+       free/paid switch and the channel link all change WITHOUT a redeploy and
+       without touching this file. These numbers are used only when the backend
+       is unreachable or has never been configured. */
+    PRICE_STARS: 50,
+    PAYMENT_REQUIRED: true,
+    CHANNEL_URL: ''
   };
 
   var TOPIC_ROOT = 'linkcall/v2';
@@ -1380,6 +1511,13 @@
     /* ---- server-side (Firebase) integration ---- */
     tgId: '',            // stable identity for the backend: tg id or web_xxxx
     access: null,        // { banned, unlocked, paid, paymentRequired }
+    /* Live app settings from GET /api/config (config/app in Firestore). Seeded
+       from the CONFIG fallbacks so the UI can render before the fetch lands. */
+    cfg: {
+      paymentRequired: CONFIG.PAYMENT_REQUIRED !== false,
+      priceStars: Number(CONFIG.PRICE_STARS) || 50,
+      channelUrl: String(CONFIG.CHANNEL_URL || '')
+    },
     serverBeat: null,    // interval id for POST /api/heartbeat
     callPosted: false,   // this call was already reported to /api/call-event start
     isAdmin: false
@@ -1493,6 +1631,29 @@
     return id;
   }
 
+  /* One call on load: the live app settings (price, paid/free, channel link).
+     This is what makes the admin panel's Settings tab work without a redeploy.
+     A failure is non-fatal: state.cfg stays on the CONFIG fallbacks. */
+  function loadConfig() {
+    return apiGet('/api/config').then(function (res) {
+      if (!res || res.offline || res.ok === false) return state.cfg;
+      if (typeof res.paymentRequired === 'boolean') {
+        state.cfg.paymentRequired = res.paymentRequired;
+      }
+      var price = Number(res.priceStars);
+      if (Number.isFinite(price) && price > 0) state.cfg.priceStars = price;
+      if (typeof res.channelUrl === 'string') state.cfg.channelUrl = res.channelUrl;
+
+      /* The access object carries the same flag for the paywall decision, so
+         keep the two in step when only the config has been fetched yet. */
+      if (state.access) state.access.paymentRequired = state.cfg.paymentRequired;
+
+      renderHome();
+      renderChannelButton();
+      return state.cfg;
+    });
+  }
+
   /* One call on load: is this user banned, did they pay, and is the filter free
      right now? Failure is non-fatal by design (see apiGet). */
   function loadAccess() {
@@ -1511,8 +1672,13 @@
           paid: !!res.paid,
           paymentRequired: res.paymentRequired !== false
         };
+        /* check-access also returns the live price, so one fewer round trip. */
+        var price = Number(res.priceStars);
+        if (Number.isFinite(price) && price > 0) state.cfg.priceStars = price;
+
         if (state.access.banned) showBlocker(id);
         renderHome();
+        renderChannelButton();
         return state.access;
       });
   }
@@ -1537,8 +1703,19 @@
   /* True only when the Gender filter should actually be usable. */
   function filterAllowed() {
     var a = state.access;
-    if (!a) return true;                    // backend not reachable: do not block
+
+    /* The admin's switch is the newest, server-authoritative answer: it is what
+       /api/config and /api/admin/update-settings just returned. Honour a free
+       setting immediately, even if an older check-access response said paid —
+       otherwise flipping to Free leaves the paywall on screen until a reload. */
+    if (state.cfg.paymentRequired === false) return true;
+
+    /* No access record yet (backend unreachable): do not block. */
+    if (!a) return state.cfg.paymentRequired !== true;
     if (a.unlocked || a.paid) return true;
+
+    /* Config still says paid (or could not be read): only an explicit "free"
+       from check-access opens the filter. Uncertain input keeps it closed. */
     return a.paymentRequired === false;
   }
 
@@ -1648,10 +1825,15 @@
      stays locked until the next check. */
   function unlockFilter() {
     var btn = $('payBtn');
+    /* Rebuilt on every restore so a price change made in the admin panel shows
+       up on the button without a reload. */
+    function priceLabel() {
+      return 'Unlock for ' + (Number(state.cfg.priceStars) || CONFIG.PRICE_STARS) + ' ⭐';
+    }
     if (btn) { btn.disabled = true; btn.textContent = 'Wait…'; }
 
     function restore() {
-      if (btn) { btn.disabled = false; btn.textContent = 'Unlock ⭐'; }
+      if (btn) { btn.disabled = false; btn.textContent = priceLabel(); }
     }
 
     apiPost('/api/create-invoice', { telegram_id: telegramId() }).then(function (res) {
@@ -2955,15 +3137,62 @@
   }
 
   /* Small line under the filter chips explaining why they are greyed out, with
-     a button that opens the Stars invoice. Hidden entirely when free/unlocked. */
+     a button that opens the Stars invoice. Hidden entirely when free/unlocked.
+     The price comes from state.cfg, i.e. from the admin panel's Settings tab. */
   function renderPaywallNote() {
     var note = $('payNote');
     if (!note) return;
     var locked = !filterAllowed();
     note.classList.toggle('hidden', !locked);
     if (locked) {
-      $('payText').textContent = 'Unlock the gender filter — ' + CONFIG.PRICE_STARS + ' Stars.';
+      var price = Number(state.cfg.priceStars) || CONFIG.PRICE_STARS;
+      $('payText').textContent = 'Unlock the gender filter — ' + price + ' Stars.';
+      var btn = $('payBtn');
+      if (btn) btn.textContent = 'Unlock for ' + price + ' ⭐';
     }
+  }
+
+  /* The "Join our Channel" button. Shown only when a channel link is configured
+     (admin panel → Settings), and only when it is a safe http(s)/t.me URL. */
+  function renderChannelButton() {
+    var btn = $('channelBtn');
+    if (!btn) return;
+    var url = safeChannelUrl(state.cfg.channelUrl);
+    /* The DEFAULT_CONFIG placeholder exists so the field has a sensible shape in
+       docs, but a real button pointing at a channel that does not exist is worse
+       than no button. Treat the untouched placeholder as "not configured". */
+    if (url && /(^|\/)(YOUR_CHANNEL|yourchannel)$/i.test(url)) url = '';
+    state.cfg.channelUrl = url;
+    btn.classList.toggle('hidden', !url);
+    if (url) btn.setAttribute('data-url', url);
+  }
+
+  /* Same rule as the server (and as safeChannelUrl in api/index.js): only
+     http(s) or t.me links survive. Stops a javascript: URL ever being opened. */
+  function safeChannelUrl(value) {
+    var raw = String(value === undefined || value === null ? '' : value).trim();
+    if (!raw || raw.length > 300) return '';
+    var withProto = /^[a-z][a-z0-9+.-]*:/i.test(raw) ? raw : 'https://' + raw;
+    var url;
+    try { url = new URL(withProto); } catch (e) { return ''; }
+    var proto = String(url.protocol || '').toLowerCase();
+    if (proto !== 'https:' && proto !== 'http:') return '';
+    if (!url.hostname || url.hostname.indexOf('.') === -1) return '';
+    return url.toString().replace(/\/$/, '');
+  }
+
+  /* Inside Telegram a normal link opens in an in-app browser and loses the Mini
+     App, so use the documented openTelegramLink(); outside it, a plain tab. */
+  function openChannel() {
+    var url = safeChannelUrl(state.cfg.channelUrl);
+    if (!url) { toast('No channel link has been set yet.', true); return; }
+    if (tg && typeof tg.openTelegramLink === 'function') {
+      try { tg.openTelegramLink(url); return; } catch (e) { /* fall through */ }
+    }
+    if (tg && typeof tg.openLink === 'function') {
+      try { tg.openLink(url); return; } catch (e) { /* fall through */ }
+    }
+    window.open(url, '_blank', 'noopener');
   }
 
   function renderCall() {
@@ -3186,7 +3415,9 @@
     search: '',
     callsBefore: 0,
     timers: { live: null, stats: null },
-    busy: false
+    busy: false,
+    settings: null,   // last config/app read from /api/admin/stats
+    tab: 'overview'
   };
 
   function adminPathActive() {
@@ -3295,6 +3526,7 @@
     $('adminSub').textContent = 'Login: ' + (ADMIN.session && ADMIN.session.id ? ADMIN.session.id : 'admin') +
       ' · ' + new Date().toLocaleString();
 
+    adminSetTab('overview');
     adminRefreshAll();
     adminStartTimers();
   }
@@ -3304,6 +3536,8 @@
     ADMIN.session = null;
     ADMIN.users = [];
     ADMIN.callsBefore = 0;
+    ADMIN.settings = null;
+    ADMIN.tab = 'overview';
     adminStopTimers();
     if (message) toast(message, true);
     $('adminWrap').classList.add('hidden');
@@ -3352,39 +3586,216 @@
       $('stReportsToday').textContent = offline ? '—' : String(res.reportsToday || 0);
 
       adminRenderPayment(!!res.paymentRequired, offline);
+      if (!offline) {
+        ADMIN.settings = {
+          paymentRequired: !!res.paymentRequired,
+          priceStars: res.priceStars,
+          channelUrl: res.channelUrl
+        };
+        /* Only push into the Settings inputs while that tab is on screen. The
+           poll runs every 5 s; without this guard it would rewrite the price box
+           under the admin's fingers. The cached copy in ADMIN.settings is used
+           the moment the tab is opened. */
+        if (ADMIN.tab === 'settings') adminRenderSettings(ADMIN.settings);
+      }
     });
   }
 
+  /* Fills the Settings pane. Keeping this in one place means the toggle, the
+     price field, the channel field and the "saved" note can never disagree. */
+  function adminRenderSettings(cfg) {
+    var required = !!cfg.paymentRequired;
+    var price = Number(cfg.priceStars);
+    if (!isFinite(price) || price <= 0) price = CONFIG.PRICE_STARS;
+    var channel = typeof cfg.channelUrl === 'string' ? cfg.channelUrl : '';
+
+    adminRenderPayment(required, false);
+
+    var now = $('setPriceNow');
+    if (now) now.textContent = price + ' ⭐';
+
+    var priceInput = $('setPriceInput');
+    /* Never stomp what the admin is typing: only fill an unfocused box. */
+    if (priceInput && document.activeElement !== priceInput) priceInput.value = String(price);
+
+    var channelInput = $('setChannelInput');
+    if (channelInput && document.activeElement !== channelInput) channelInput.value = channel;
+
+    /* Mirror the saved values into the public frontend state so the home screen
+       and the unlock button update without a reload. state.access carries a copy
+       of the same flag for the paywall decision — update it too, otherwise
+       switching to Paid would leave the filter free until the next
+       /api/check-access round trip. */
+    state.cfg.priceStars = price;
+    state.cfg.paymentRequired = required;
+    state.cfg.channelUrl = channel;
+    if (state.access) state.access.paymentRequired = required;
+    renderPaywallNote();
+    renderChannelButton();
+  }
+
+  /* Toggle label + disabled state only; the numbers live in adminRenderSettings. */
   function adminRenderPayment(required, offline) {
     var toggle = $('payToggle');
-    var name = $('payName');
-    var stateEl = $('payState');
-    toggle.checked = required;
+    toggle.checked = !!required;
     toggle.disabled = !!offline;
-    name.textContent = 'Gender Matching — ' + (required ? 'Paid (Stars)' : 'Free');
-    stateEl.textContent = offline
+    $('payName').textContent = 'Gender Matching — ' + (required ? 'Paid (Stars)' : 'Free');
+    $('payState').textContent = offline
       ? 'Backend offline — the setting cannot be changed.'
       : (required
-        ? 'Users must pay ' + CONFIG.PRICE_STARS + ' Stars to use the filter.'
+        ? 'Users must pay ' + (Number(state.cfg.priceStars) || CONFIG.PRICE_STARS) + ' Stars to use the filter.'
         : 'Every user gets the filter for free.');
+
+    /* The three Settings controls follow the same lock as the switch, in BOTH
+       directions: an offline read disables them, a later good read re-enables
+       them. Setting .disabled on every call avoids a stuck form. */
+    ['setPriceInput', 'setChannelInput', 'setPriceSave', 'setChannelSave'].forEach(function (id) {
+      if ($(id)) $(id).disabled = !!offline;
+    });
   }
 
   function adminTogglePayment(checked) {
     if (ADMIN.busy) return;
     ADMIN.busy = true;
     $('payToggle').disabled = true;
-    adminPost('/api/admin/toggle-payment', { required: !!checked }).then(function (res) {
+    adminPost('/api/admin/update-settings', { paymentRequired: !!checked }).then(function (res) {
       ADMIN.busy = false;
       $('payToggle').disabled = false;
+      if (res === null) return;   /* 401: adminLogout() has already spoken */
       if (!res || res.ok === false) {
         toast((res && res.error) || 'Could not save the toggle.', true);
         $('payToggle').checked = !checked;
         return;
       }
-      adminRenderPayment(!!res.required, false);
-      toast('Gender Matching is now ' + (res.required ? 'PAID' : 'FREE') + '.');
+      adminRenderSettings(res);
+      toast('Gender Matching is now ' + (res.paymentRequired ? 'PAID' : 'FREE') + '.');
       adminLoadLogs();
     });
+  }
+
+  /* ---- Settings pane: price ------------------------------------------- */
+  function adminSavePrice() {
+    var input = $('setPriceInput');
+    var err = $('setPriceErr');
+    var btn = $('setPriceSave');
+    var raw = String(input.value || '').trim();
+    var n = Number(raw);
+
+    err.textContent = '';
+    err.classList.add('hidden');
+
+    if (!raw || !isFinite(n) || Math.floor(n) !== n) {
+      err.textContent = 'Enter a whole number of Stars.';
+      err.classList.remove('hidden');
+      return;
+    }
+    if (n < 1 || n > 10000) {
+      err.textContent = 'The price must be between 1 and 10000 Stars.';
+      err.classList.remove('hidden');
+      return;
+    }
+
+    btn.disabled = true;
+    adminPost('/api/admin/update-settings', { priceStars: n }).then(function (res) {
+      btn.disabled = false;
+      /* null means adminPost already hit a 401 and ran adminLogout(), which
+         shows its own "session expired" toast. Do not also paint an error into
+         a pane that is no longer on screen. */
+      if (res === null) return;
+      if (!res || res.ok === false) {
+        err.textContent = (res && res.error) || 'Could not save the price.';
+        err.classList.remove('hidden');
+        return;
+      }
+      adminRenderSettings(res);
+      adminFlashSaved('Price saved: ' + res.priceStars + ' ⭐');
+      adminLoadLogs();
+    });
+  }
+
+  /* ---- Settings pane: channel link ------------------------------------ */
+  function adminSaveChannel() {
+    var input = $('setChannelInput');
+    var err = $('setChannelErr');
+    var btn = $('setChannelSave');
+    var raw = String(input.value || '').trim();
+
+    err.textContent = '';
+    err.classList.add('hidden');
+
+    if (raw && !safeChannelUrl(raw)) {
+      err.textContent = 'Use a full link starting with https:// (or leave it empty).';
+      err.classList.remove('hidden');
+      return;
+    }
+
+    btn.disabled = true;
+    adminPost('/api/admin/update-settings', { channelUrl: raw }).then(function (res) {
+      btn.disabled = false;
+      if (res === null) return;   /* 401: adminLogout() has already spoken */
+      if (!res || res.ok === false) {
+        err.textContent = (res && res.error) || 'Could not save the link.';
+        err.classList.remove('hidden');
+        return;
+      }
+      adminRenderSettings(res);
+      /* res.channelUrl is '' when the admin cleared the box, which is exactly
+         the state that hides the home-screen button. */
+      adminFlashSaved(res.channelUrl ? 'Channel link saved.' : 'Channel button hidden.');
+      adminLoadLogs();
+    });
+  }
+
+  /* Small green confirmation that fades out — a toast alone is easy to miss on
+     the Settings tab, where every save lands in the same place. */
+  var savedTimer = null;
+  function adminFlashSaved(text) {
+    var el = $('setSaved');
+    if (!el) return;
+    el.textContent = '✅ ' + text;
+    el.classList.add('ok');
+    el.classList.remove('hidden');
+    if (savedTimer) clearTimeout(savedTimer);
+    savedTimer = setTimeout(function () {
+      el.classList.add('hidden');
+    }, 2600);
+  }
+
+  /* ---------------------------------------------------------- tab switcher */
+  var ADMIN_PANES = {
+    overview: 'paneOverview',
+    settings: 'paneSettings',
+    live: 'paneLive',
+    users: 'paneUsers',
+    logs: 'paneLogs'
+  };
+
+  /* Panes stay in the DOM the whole time — the tables keep their rows and the
+     refresh timers keep running, so switching tabs is instant and never loses
+     the scroll position of the section you just left. */
+  function adminSetTab(name) {
+    if (!ADMIN_PANES[name]) name = 'overview';
+    ADMIN.tab = name;
+
+    Object.keys(ADMIN_PANES).forEach(function (key) {
+      var pane = $(ADMIN_PANES[key]);
+      if (pane) pane.classList.toggle('on', key === name);
+    });
+
+    Array.prototype.forEach.call(document.querySelectorAll('#adminTabs .a-tab-btn'), function (btn) {
+      btn.setAttribute('aria-selected', btn.getAttribute('data-tab') === name ? 'true' : 'false');
+    });
+
+    /* Pull fresh data the moment a tab is opened rather than waiting up to five
+       seconds for the next poll. The Settings pane paints from the cached copy
+       first, so the inputs are filled immediately even on a slow connection. */
+    if (name === 'settings') {
+      if (ADMIN.settings) adminRenderSettings(ADMIN.settings);
+      adminLoadStats();
+    }
+    if (name === 'live') adminLoadLive();
+    if (name === 'users') adminLoadUsers();
+    if (name === 'logs') adminLoadLogs();
   }
 
   /* -------------------------------------------------------------- C/D. live */
@@ -3396,6 +3807,7 @@
 
       $('waitCount').textContent = String(waiting.length);
       $('callCount').textContent = String(calls.length);
+      if ($('tabLiveN')) $('tabLiveN').textContent = String(waiting.length + calls.length);
 
       var wb = $('waitBody');
       if (!waiting.length) {
@@ -3439,6 +3851,7 @@
       if (!res) return;
       ADMIN.users = res.users || [];
       $('userCount').textContent = String(res.total || ADMIN.users.length);
+      if ($('tabUsersN')) $('tabUsersN').textContent = String(res.total || ADMIN.users.length);
       adminRenderUsers();
       adminRenderSortHeaders();
     });
@@ -3691,6 +4104,35 @@
 
     $('payToggle').addEventListener('change', function () { adminTogglePayment(this.checked); });
 
+    Array.prototype.forEach.call(document.querySelectorAll('#adminTabs .a-tab-btn'), function (btn) {
+      btn.addEventListener('click', function () { adminSetTab(btn.getAttribute('data-tab')); });
+    });
+
+    /* Arrow keys move between tabs, as expected of a role="tablist". */
+    $('adminTabs').addEventListener('keydown', function (e) {
+      if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+      var buttons = Array.prototype.slice.call(this.querySelectorAll('.a-tab-btn'));
+      var at = buttons.indexOf(document.activeElement);
+      if (at === -1) return;
+      e.preventDefault();
+      var next = buttons[(at + (e.key === 'ArrowRight' ? 1 : buttons.length - 1)) % buttons.length];
+      next.focus();
+      adminSetTab(next.getAttribute('data-tab'));
+    });
+
+    if ($('setPriceSave')) $('setPriceSave').addEventListener('click', adminSavePrice);
+    if ($('setChannelSave')) $('setChannelSave').addEventListener('click', adminSaveChannel);
+    if ($('setPriceInput')) {
+      $('setPriceInput').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); adminSavePrice(); }
+      });
+    }
+    if ($('setChannelInput')) {
+      $('setChannelInput').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); adminSaveChannel(); }
+      });
+    }
+
     $('userRefresh').addEventListener('click', function () { ADMIN.search = ''; $('userSearch').value = ''; adminLoadUsers(); });
 
     var searchTimer = null;
@@ -3789,6 +4231,7 @@
     $('primaryBtn').addEventListener('click', onPrimary);
     $('orb').addEventListener('click', onPrimary);
     $('shareBtn').addEventListener('click', shareInvite);
+    $('channelBtn').addEventListener('click', openChannel);
 
     $('settingsBtn').addEventListener('click', function () {
       renderSettings();
@@ -3890,7 +4333,11 @@
     tgInit();
 
     /* Kick off the backend checks in the background. They must never block the
-       UI: a static-only deploy has no /api at all and must still work. */
+       UI: a static-only deploy has no /api at all and must still work.
+       loadConfig() carries the price / paid-free switch / channel link that the
+       admin panel controls, so it runs alongside the access check. */
+    renderChannelButton();
+    loadConfig();
     loadAccess();
 
     var supported = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.RTCPeerConnection);
