@@ -4,7 +4,7 @@
   "private": true,
   "description": "LinkCall — single-file random audio chat (Telegram Mini App) + Vercel API routes on Firebase.",
   "engines": {
-    "node": "26.x"
+    "node": "20.x"
   },
   "dependencies": {
     "firebase-admin": "^13.0.2"
