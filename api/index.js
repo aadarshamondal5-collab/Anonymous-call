@@ -68,24 +68,75 @@ const PRODUCT = 'gender_filter';
 const DEFAULT_CONFIG = {
   paymentRequired: true,
   priceStars: 50,
-  channelUrl: 'https://t.me/linkcallofficial'
+  /* Deliberately a placeholder, not a real channel: on a fresh deploy nobody
+   * has chosen a channel yet, and a button pointing at someone else's channel is
+   * worse than no button. The client recognises this exact value and hides the
+   * button until an admin saves a real link. */
+  channelUrl: 'https://t.me/YOUR_CHANNEL'
 };
 
 /* =============================================================== 1. firebase */
 
 let cachedApp = null;
 let triedApp = false;
+/* Why initialisation failed, so /api/config and the admin panel can say
+ * something more useful than "offline". One of:
+ *   ''                 not attempted yet / fine
+ *   'missing'          LC_FIREBASE_CRED_JSON_33 is empty
+ *   'invalid_json'     the value is not parseable JSON
+ *   'missing_fields'   parsed, but project_id / client_email / private_key absent
+ *   'bad_private_key'  private_key present but not a usable PEM
+ *   'init_error'       firebase-admin threw while initialising */
+let appError = '';
 
-/* Vercel's env var UI keeps newlines as the two characters \ and n. Paste the
- * JSON exactly as downloaded and this normalisation makes it parse anyway. */
+/* Vercel's env var UI keeps newlines as the two characters \ and n, and some
+ * terminal pastes arrive wrapped in single quotes. Both are repaired here so a
+ * correct service account never fails for cosmetic reasons. */
 function readServiceAccount() {
   const raw = process.env.LC_FIREBASE_CRED_JSON_33;
-  if (!raw || !String(raw).trim()) return null;
+  if (!raw || !String(raw).trim()) { appError = 'missing'; return null; }
+
+  let text = String(raw).trim();
+
+  /* Strip one layer of wrapping quotes if the whole value was pasted quoted. */
+  if ((text.charAt(0) === '"' && text.charAt(text.length - 1) === '"') ||
+      (text.charAt(0) === "'" && text.charAt(text.length - 1) === "'")) {
+    text = text.slice(1, -1).trim();
+  }
+
+  /* The two things that actually break pasted service accounts: literal \n
+   * sequences standing in for real newlines (fatal inside private_key), and a
+   * base64-wrapped value. */
+  let parsed = null;
   try {
-    return JSON.parse(String(raw).replace(/\\n/g, '\n'));
+    parsed = JSON.parse(text.replace(/\\n/g, '\n'));
   } catch (e) {
+    try {
+      parsed = JSON.parse(Buffer.from(text, 'base64').toString('utf8'));
+    } catch (e2) {
+      appError = 'invalid_json';
+      return null;
+    }
+  }
+
+  if (!parsed || typeof parsed !== 'object') { appError = 'invalid_json'; return null; }
+
+  /* private_key arrives with \n escapes far more often than not; normalise even
+   * when the JSON parse already succeeded, because a private_key containing a
+   * literal backslash-n is rejected by the crypto layer, not by JSON.parse. */
+  if (typeof parsed.private_key === 'string') {
+    parsed.private_key = parsed.private_key.replace(/\\n/g, '\n');
+  }
+
+  if (!parsed.project_id || !parsed.client_email || !parsed.private_key) {
+    appError = 'missing_fields';
     return null;
   }
+  if (parsed.private_key.indexOf('BEGIN PRIVATE KEY') === -1) {
+    appError = 'bad_private_key';
+    return null;
+  }
+  return parsed;
 }
 
 function getApp() {
@@ -98,12 +149,54 @@ function getApp() {
   try {
     const options = { credential: admin.credential.cert(creds) };
     const dbUrl = process.env.LC_FIREBASE_DB_LINK_11;
-    if (dbUrl) options.databaseURL = dbUrl;
+    if (dbUrl && String(dbUrl).trim()) options.databaseURL = String(dbUrl).trim();
     cachedApp = admin.apps.length ? admin.app() : admin.initializeApp(options);
   } catch (e) {
+    appError = 'init_error';
     cachedApp = null;
   }
   return cachedApp;
+}
+
+/** A short, safe description of why the backend is not live. Never includes
+ *  any part of the credential — only the class of problem. */
+function configHint() {
+  if (db()) return '';
+  if (!appError) getApp();
+  switch (appError) {
+    case 'missing':
+      return 'LC_FIREBASE_CRED_JSON_33 is empty in this environment.';
+    case 'invalid_json':
+      return 'LC_FIREBASE_CRED_JSON_33 is not valid JSON (paste it as one line).';
+    case 'missing_fields':
+      return 'LC_FIREBASE_CRED_JSON_33 lacks project_id, client_email or private_key.';
+    case 'bad_private_key':
+      return 'LC_FIREBASE_CRED_JSON_33 has a private_key that is not a PEM key.';
+    case 'init_error':
+      return 'Firebase Admin failed to initialise with the supplied credentials.';
+    default:
+      return 'Firebase is not configured.';
+  }
+}
+
+/** Turns a thrown Firestore error into one sentence an admin can act on.
+ *  The common real-world causes are all distinguishable by code/message. */
+function firebaseFailureText(err) {
+  const code = (err && err.code) || '';
+  const msg = String((err && err.message) || '');
+  if (/PERMISSION_DENIED|permission/i.test(code + msg)) {
+    return 'Firestore refused the request: the service account has no permission on this project, or the Firestore API is disabled.';
+  }
+  if (/NOT_FOUND|not found|database .* does not exist/i.test(code + msg)) {
+    return 'Firestore database not found. Create a Firestore database in this project first.';
+  }
+  if (/UNAUTHENTICATED|invalid_grant|invalid_rapt|credential/i.test(code + msg)) {
+    return 'The service account credentials were rejected. The key may have been revoked or belong to another project.';
+  }
+  if (/ENOTFOUND|EAI_AGAIN|ETIMEDOUT|ECONNREFUSED|network/i.test(code + msg)) {
+    return 'Could not reach Firestore over the network from this deployment.';
+  }
+  return 'Firestore request failed: ' + (msg || code || 'unknown error').slice(0, 160);
 }
 
 /** Firestore handle, or null when Firebase is not configured. */
@@ -133,6 +226,18 @@ function asText(value, max) {
  * Anything else (including the empty string) is stored as null, which means
  * "not set" and never filters anyone out. */
 const GENDERS = ['male', 'female', 'other'];
+
+/* The six avatars the client offers, as stable keys. The heartbeat used to
+ * accept any 8-character string; a whitelist means a modified client cannot
+ * stash junk in a public collection, and adding an avatar is a one-line change
+ * on both sides. An unknown value becomes '' and the client falls back to its
+ * own default, so an older stored emoji still renders. */
+const AVATARS = ['cat', 'fox', 'panda', 'penguin', 'koala', 'lion'];
+
+function oneOfAvatar(value) {
+  const v = asText(value, 16).trim().toLowerCase();
+  return AVATARS.indexOf(v) === -1 ? '' : v;
+}
 
 function oneOfGender(value) {
   const v = asText(value, 16).trim().toLowerCase();
@@ -393,7 +498,7 @@ async function getAppConfig() {
     if (snap.exists) data = snap.data() || {};
   } catch (e) {
     /* Firebase not configured or down: defaults still answer the request. */
-    return Object.assign({}, DEFAULT_CONFIG, { backend: isConfigured() ? 'live' : 'offline' });
+    return offlineConfig();
   }
 
   let paymentRequired;
@@ -427,6 +532,16 @@ async function getAppConfig() {
     channelUrl: channelUrl,
     backend: 'live'
   };
+}
+
+/** The same payload when Firestore could not be reached, plus a hint saying
+ *  which part of the setup is wrong. Never throws, so /api/config always
+ *  answers even on a completely unconfigured deploy. */
+function offlineConfig() {
+  return Object.assign({}, DEFAULT_CONFIG, {
+    backend: 'offline',
+    hint: configHint()
+  });
 }
 
 /** Accepts http(s):// and t.me/… links. Returns '' for anything else. */
@@ -694,6 +809,57 @@ async function clearReports(telegramId) {
 
 /* ========================================================= 6. public routes */
 
+/* GET /api/health — a self-check that names the broken setting.
+ *
+ * This exists because "Backend not connected" is unactionable. It reports only
+ * booleans and a reason string, never any part of a secret, and it is public so
+ * it can be opened in a browser on the deployed domain:
+ *     https://<your-domain>/api/health
+ *
+ * It performs a real Firestore read, so a green answer means the key works AND
+ * the database is reachable and writable-in-principle — not merely that the
+ * environment variable was non-empty. */
+async function routeHealth(req, res) {
+  if (!requireGet(req, res)) return;
+
+  const configured = isConfigured();
+  const out = {
+    ok: false,
+    backend: configured ? 'live' : 'offline',
+    node: process.version,
+    env: {
+      credential: !!process.env.LC_FIREBASE_CRED_JSON_33,
+      databaseUrl: !!process.env.LC_FIREBASE_DB_LINK_11,
+      botToken: !!process.env.LC_TG_BOT_KEY_99,
+      webhookSecret: !!process.env.LC_TG_WEBHOOK_PASS_44,
+      adminUser: !!process.env.LC_BOSS_LOGIN_USER_12,
+      adminPass: !!process.env.LC_BOSS_LOGIN_PASS_88,
+      tokenSecret: !!process.env.LC_BOSS_TOKEN_KEY_55
+    },
+    firestore: 'unknown',
+    hint: ''
+  };
+
+  if (!configured) {
+    out.hint = configHint();
+    return send(res, 200, out);
+  }
+
+  /* A single tiny read. A missing collection is a SUCCESS: it proves auth and
+   * connectivity, and an empty project legitimately has no documents yet. */
+  try {
+    const snap = await fs().collection('config').limit(1).get();
+    out.firestore = 'reachable';
+    out.docs = snap.size;
+    out.ok = true;
+    return send(res, 200, out);
+  } catch (e) {
+    out.firestore = 'unreachable';
+    out.hint = firebaseFailureText(e);
+    return send(res, 200, out);
+  }
+}
+
 /* GET /api/config — the ONE document the frontend reads on load.
  * Everything the admin can change lives here: the paid/free switch, the Stars
  * price and the broadcast channel link. Public and never 500: a broken or
@@ -714,7 +880,7 @@ async function routeConfig(req, res) {
       serverTime: Date.now()
     });
   } catch (e) {
-    send(res, 200, Object.assign({ ok: true, backend: 'offline' }, DEFAULT_CONFIG));
+    send(res, 200, Object.assign({ ok: true }, offlineConfig()));
   }
 }
 
@@ -727,10 +893,14 @@ async function routePaymentRequired(req, res) {
       ok: true,
       required: cfg.paymentRequired,
       price: cfg.priceStars,
-      backend: isConfigured() ? 'live' : 'offline'
+      backend: cfg.backend,
+      hint: cfg.hint || ''
     });
   } catch (e) {
-    send(res, 200, { ok: true, required: true, price: DEFAULT_CONFIG.priceStars, backend: 'offline' });
+    send(res, 200, {
+      ok: true, required: true, price: DEFAULT_CONFIG.priceStars,
+      backend: 'offline', hint: configHint()
+    });
   }
 }
 
@@ -841,7 +1011,7 @@ async function routeHeartbeat(req, res) {
 
     await handle.collection('heartbeats').doc(id).set({
       name: asText(body.name, 32),
-      avatar: asText(body.avatar, 8),
+      avatar: oneOfAvatar(body.avatar),
       gender: oneOfGender(body.gender),
       filter: oneOfGender(body.filter),
       status: status,
@@ -1313,10 +1483,24 @@ async function routeAdminStats(req, res) {
         priceStars: DEFAULT_CONFIG.priceStars,
         channelUrl: DEFAULT_CONFIG.channelUrl,
         serverTime: Date.now(),
+        hint: configHint(),
         error: 'Firebase is not configured (LC_FIREBASE_CRED_JSON_33).'
       });
     }
-    fail(res, 500, 'Could not load stats.');
+    /* Any other failure is Firestore itself: wrong project, disabled API,
+     * rules, or a revoked key. The message matters here because the admin sees
+     * it — a bare "offline" sends people to re-paste a credential that was
+     * never the problem. */
+    return send(res, 200, {
+      ok: false, backend: 'offline',
+      totalUsers: 0, onlineNow: 0, waiting: 0, inCall: 0,
+      callsToday: 0, revenueToday: 0, reportsToday: 0,
+      paymentRequired: DEFAULT_CONFIG.paymentRequired,
+      priceStars: DEFAULT_CONFIG.priceStars,
+      channelUrl: DEFAULT_CONFIG.channelUrl,
+      serverTime: Date.now(),
+      error: firebaseFailureText(e)
+    });
   }
 }
 
@@ -1951,6 +2135,7 @@ module.exports = async function handler(req, res) {
 
   try {
     /* ---- public ------------------------------------------------------- */
+    if (path === '/api/health') return await routeHealth(req, res);
     if (path === '/api/config') return await routeConfig(req, res);
     if (path === '/api/payment-required') return await routePaymentRequired(req, res);
     if (path === '/api/check-access') return await routeCheckAccess(req, res, query);
