@@ -209,7 +209,11 @@
   .btn-send { padding: 10px 18px; font-size: 14px; align-self: stretch; height: auto; }
 
   /* ---------------- onboarding ---------------- */
-  #onboard .scroll { justify-content: center; }
+  /* Only horizontal centring here, via margin auto on the children. Vertical
+     centring is deliberately NOT used: with a text input focused, the mobile
+     keyboard shrinks the viewport and a centred form gets pushed off the top.
+     (The old `justify-content: center` on .scroll was inert anyway — .scroll is
+     a flex item of .screen, not a flex container.) */
   #onboard .card, #onboard .intro { max-width: 460px; width: 100%; margin: 0 auto; }
   #onboard .intro { margin-bottom: 20px; }
 
@@ -378,10 +382,14 @@
   }
 
   /* ---------------- ended ---------------- */
-  #ended .scroll { justify-content: center; align-items: center; text-align: center; }
+  /* .scroll is a flex ITEM of .screen, not a container, so justify-content and
+     align-items on it were inert — that is what pushed the card off-centre.
+     Centring belongs on .ended-inner, which really is a flex container. */
+  #ended .scroll { display: flex; flex-direction: column; }
   .ended-inner {
-    width: 100%; max-width: 340px;
+    width: 100%; max-width: 340px; margin: auto;
     display: flex; flex-direction: column; align-items: center; gap: 12px;
+    text-align: center;
   }
   .ended-orb {
     width: 96px; height: 96px; border-radius: 50%;
@@ -1204,11 +1212,6 @@
         <input class="input" id="adminPass" type="password" autocomplete="current-password" placeholder="••••••••">
         <p class="error hidden" id="adminError"></p>
         <button class="btn btn-primary spaced-top" id="adminLoginBtn" type="button">Login</button>
-        <p class="hint legal-note">
-          Admin credentials are provided through Vercel environment variables
-          (<code>LC_BOSS_LOGIN_USER_12</code> and <code>LC_BOSS_LOGIN_PASS_88</code>).
-          Nothing is hardcoded in this file.
-        </p>
       </div>
     </div>
   </div>
@@ -1485,9 +1488,27 @@
   var CONFIG = {
     BROKER: 'wss://broker.emqx.io:8084/mqtt',
     LOBBY: 'default',
+    /* STUN alone only works when at least one side has a hole-punchable NAT.
+       On mobile data (carrier-grade NAT) BOTH sides can be un-punchable, and the
+       symptom is precisely the reported one: the call "connects", sometimes one
+       direction works and the other does not, or nothing arrives at all.
+       A TURN relay fixes that by forwarding the media.
+       
+       Two public relays are used as a best-effort default (openrelay). They are
+       free and rate-limited, so for production put your own in the placeholder
+       below and the open ones will stop being needed. */
     ICE: [
       { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' }
+      { urls: 'stun:stun1.l.google.com:19302' },
+      {
+        urls: [
+          'turn:openrelay.metered.ca:80',
+          'turn:openrelay.metered.ca:443',
+          'turn:openrelay.metered.ca:443?transport=tcp'
+        ],
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      }
       // ,{ urls: 'turn:your.turn.host:3478', username: 'user', credential: 'pass' }
     ],
     /* Admin panel path. Opened at https://your-app/admin (a Vercel rewrite in
@@ -2324,6 +2345,29 @@
       ts: now()
     };
 
+    /* If this is the person we are talking to, keep the call screen in sync.
+       The avatar/name normally arrive inside the invite payload, but a presence
+       card is the authoritative, freshly-typed value: it is what fixes the case
+       where the partner picked their avatar and we still showed the default.
+       Only fill in values that are actually present so a partial card cannot
+       blank out what the invite already told us. */
+    if (state.call && state.call.peerId === msg.id) {
+      var live = state.peers[msg.id];
+      var cur = state.call.partner || {};
+      var nextName = msg.name ? (msg.name || 'Stranger') : cur.name;
+      var nextAvatar = msg.avatar ? live.avatar : cur.avatar;
+      if (nextName !== cur.name || nextAvatar !== cur.avatar) {
+        state.call.partner = {
+          id: msg.id,
+          tid: live.tid || cur.tid || '',
+          name: nextName,
+          avatar: nextAvatar,
+          gender: cur.gender || live.gender || null
+        };
+        setPeerInfo(state.call.partner);
+      }
+    }
+
     if (state.searching) tryMatch();
     renderOnline();
   }
@@ -2879,6 +2923,10 @@
 
       stream.getTracks().forEach(function (track2) { call.pc.addTrack(track2, stream); });
       startMicMeter(call, stream);
+      /* Honour whichever toggles the user already pressed. Without this the
+         track is unconditionally live and a "hands-free off" set before the call
+         connected is silently ignored. */
+      applyMicState(call);
       renderCall();
 
       if (call.pendingOffer) {
@@ -2974,14 +3022,24 @@
     /* The stream can be rebound (ontrack fires once per track), so guard against
        reloading the same source and restarting playback from zero. */
     if (audio.srcObject !== stream) audio.srcObject = stream;
-    audio.muted = !state.call || !state.call.speakerOn;
-    // Keep the volume authoritative; some Android WebViews reset it on rebind.
-    audio.volume = 1;
 
-    /* Echo guard: if the far end is coming out of a loudspeaker at full tilt it
-       leaks back into our mic and AEC has to fight it. Lowering playback a touch
-       when the "speaker" control is on gives AEC headroom. */
-    audio.playbackRate = 1;
+    /* Deliberately NOT muted and NOT volume-scaled.
+       *
+       * An earlier version muted this element whenever the user tapped
+       * "Speaker off", and lowered the volume "to give AEC headroom". Both were
+       * wrong:
+       *
+       *  - Muting one side is silent and asymmetric. The partner has no idea
+       *    their audio is being dropped locally, so it looks exactly like the
+       *    "sometimes I cannot hear them" bug.
+       *  - AEC cancels echo by subtracting a REFERENCE copy of what the speaker
+       *    is playing. At low volume or muted, that reference is gone and AEC
+       *    stops working — which is when the partner starts hearing themselves.
+       *
+       * The element therefore always plays at full volume; the Speaker control
+       * now acts on the microphone instead (see toggleSpeaker). */
+    audio.muted = false;
+    audio.volume = 1;
 
     setPeerStatus('Connected');
 
@@ -3131,10 +3189,17 @@
   }
 
   // ============================================================ mic meter
-  var meter = { ctx: null, raf: null, data: null };
+  var meter = { ctx: null, raf: null, data: null, src: null };
 
   /* A live level bar so the user can see the mic is actually working before
-     blaming the other side for silence. */
+     blaming the other side for silence.
+     
+     This creates one AudioContext PER CALL. Android caps the number of live
+     AudioContexts (and of concurrent audio inputs) at roughly six; leaking one
+     per call is what makes the microphone stop working after a few calls in a
+     row — the classic "kabhi kabhi mic kaam nahi karta". So every resource is
+     tracked and released in stopMicMeter(), and a context that is still open is
+     reused rather than replaced. */
   function startMicMeter(call, stream) {
     stopMicMeter();
     var AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -3146,10 +3211,10 @@
          If it stays suspended the analyser returns all zeros, the level meter
          never moves and the user thinks their mic is broken. Resume explicitly. */
       if (meter.ctx.state === 'suspended' && meter.ctx.resume) meter.ctx.resume();
-      var source = meter.ctx.createMediaStreamSource(stream);
+      meter.src = meter.ctx.createMediaStreamSource(stream);
       var analyser = meter.ctx.createAnalyser();
       analyser.fftSize = 512;
-      source.connect(analyser);
+      meter.src.connect(analyser);
       meter.data = new Uint8Array(analyser.frequencyBinCount);
       var bars = $('micMeter').children;
 
@@ -3159,9 +3224,10 @@
         var sum = 0;
         for (var i = 0; i < meter.data.length; i++) sum += meter.data[i];
         var level = Math.min(1, (sum / meter.data.length) / 90);
-        var active = call.micOn && level > 0.04;
+        var live = !!(call.micOn && call.speakerOn);
+        var active = live && level > 0.04;
         $('ringWrap').classList.toggle('talking', active);
-        $('micMeter').classList.toggle('idle', !call.micOn);
+        $('micMeter').classList.toggle('idle', !live);
         for (var b = 0; b < bars.length; b++) {
           var wobble = 0.35 + Math.abs(Math.sin(now() / 220 + b)) * 0.65;
           bars[b].style.height = Math.max(4, Math.round(level * wobble * 22)) + 'px';
@@ -3170,6 +3236,7 @@
       };
       meter.raf = requestAnimationFrame(tick);
     } catch (e) {
+      stopMicMeter();
       $('micMeter').classList.add('idle');
     }
   }
@@ -3177,6 +3244,11 @@
   function stopMicMeter() {
     if (meter.raf) cancelAnimationFrame(meter.raf);
     meter.raf = null;
+    /* Disconnect the source explicitly: a MediaStreamSource holds a reference to
+     * the mic stream, which keeps the capture alive and can block the next
+     * getUserMedia() on some Android builds. */
+    if (meter.src) { try { meter.src.disconnect(); } catch (e) { /* ignore */ } }
+    meter.src = null;
     if (meter.ctx) { try { meter.ctx.close(); } catch (e) { /* ignore */ } }
     meter.ctx = null;
     meter.data = null;
@@ -3298,10 +3370,18 @@
   function renderCall() {
     var call = state.call;
     if (!call) return;
-    $('micBtn').classList.toggle('off', !call.micOn);
-    $('micLabel').textContent = call.micOn ? 'Mute' : 'Unmute';
+    /* The track is live only when BOTH flags are on (see applyMicState), so the
+       Mute button must report the effective state, not just call.micOn. Showing
+       "Mute" while the mic is actually dead — because Hands-free is off — is a
+       lie the user would act on by talking into a muted mic. */
+    var live = !!call.micOn && !!call.speakerOn;
+    $('micBtn').classList.toggle('off', !live);
+    $('micLabel').textContent = live ? 'Mute' : 'Unmute';
+    /* speakerOn is the hands-free (mic) toggle, so it reads like the mic one.
+       Keeping the old "Speaker/Muted" wording here was actively misleading: it
+       described muting the PARTNER, which is no longer what the button does. */
     $('speakerBtn').classList.toggle('off', !call.speakerOn);
-    $('speakerLabel').textContent = call.speakerOn ? 'Speaker' : 'Muted';
+    $('speakerLabel').textContent = call.speakerOn ? 'Hands-free' : 'Hands-free off';
   }
 
   function setPeerInfo(partner) {
@@ -3431,27 +3511,44 @@
   function toggleMic() {
     var call = state.call;
     if (!call || !call.mic) return;
-    var audio = call.mic.getAudioTracks()[0];
-    if (!audio) return;
-    audio.enabled = !audio.enabled;
-    call.micOn = audio.enabled;
-    renderCall();
-    // Only claim "mute" — never fake a "Connected" we did not verify.
-    if (!call.micOn) setPeerStatus('Your mic is muted');
+    call.micOn = !call.micOn;
+    applyMicState(call);
+    /* applyMicState is the authority on whether the track is live, so report
+       THAT rather than call.micOn: with Hands-free off, pressing Unmute leaves
+       the mic dead and "Connected" would be a lie. */
+    var live = !!call.micOn && !!call.speakerOn;
+    if (!live) setPeerStatus('Your mic is muted');
     else setPeerStatus(call.connectedAt ? 'Connected' : 'Connecting…');
   }
 
-  /* Mobile browsers ignore setSinkId, so "speaker" simply mutes the remote
-     audio locally — the same practical result for the user. */
+  /* One place that decides whether the microphone is actually live.
+   *
+   * Two controls touch the same track: Mute and Hands-free. Letting each one
+   * write track.enabled directly made them fight — pressing Mute then Hands-free
+   * could leave the track live while the button said "Unmute", which is the
+   * worst possible failure for a mic control. The effective state is the AND of
+   * both flags, applied here every time either one changes. */
+  function applyMicState(call) {
+    if (!call || !call.mic) return;
+    var live = !!call.micOn && !!call.speakerOn;
+    call.mic.getAudioTracks().forEach(function (t) { t.enabled = live; });
+    renderCall();
+  }
+
+  /* "Speaker" is really the hands-free toggle, and it acts on the MICROPHONE.
+     *
+     * Muting the incoming audio (the old behaviour) is the wrong lever: only this
+     * side goes quiet, the partner is never told, and AEC loses the playback
+     * reference it needs. Disabling our own mic track instead is what actually
+     * stops the feedback loop — the partner stops hearing themselves and we
+     * never lose their voice. */
   function toggleSpeaker() {
     var call = state.call;
     if (!call) return;
     call.speakerOn = !call.speakerOn;
-    var audio = $('remoteAudio');
-    if (audio) audio.muted = !call.speakerOn;
-    renderCall();
-    if (!call.speakerOn) toast('Your partner is muted locally');
-    else toast('Speaker on — use headphones if you hear an echo');
+    applyMicState(call);
+    if (!call.speakerOn) toast('Hands-free off — your mic is muted for your partner');
+    else toast('Hands-free on');
   }
 
   function saveLobby() {
@@ -3650,9 +3747,19 @@
     $('adminSub').textContent = 'Login: ' + (ADMIN.session && ADMIN.session.id ? ADMIN.session.id : 'admin') +
       ' · ' + new Date().toLocaleString();
 
-    adminSetTab('overview');
+    /* Honour /admin#users on load and after login, so a bookmark or a shared
+       link opens the intended section instead of the Overview tab. */
+    adminSetTab(adminTabFromHash(), true);
     adminRefreshAll();
     adminStartTimers();
+  }
+
+  /* Reads one of the known tab names out of location.hash. Anything unexpected
+     — a typo, a stale bookmark, an injected fragment — falls back to overview,
+     which adminSetTab() also enforces. */
+  function adminTabFromHash() {
+    var raw = String(window.location.hash || '').replace(/^#\/?/, '').toLowerCase();
+    return ADMIN_PANES[raw] ? raw : 'overview';
   }
 
   function adminLogout(message) {
@@ -3667,6 +3774,14 @@
     $('adminWrap').classList.add('hidden');
     $('adminLoginWrap').classList.remove('hidden');
     if ($('adminPass')) $('adminPass').value = '';
+    /* Drop the tab fragment with the session. Leaving #users behind would send
+       the next login straight into a section chosen by whoever was signed in
+       before, which is confusing on a shared device. */
+    try {
+      if (window.history && window.history.replaceState && window.location.hash) {
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      }
+    } catch (e) { /* ignore */ }
     showScreen('admin');
   }
 
@@ -3944,9 +4059,23 @@
   /* Panes stay in the DOM the whole time — the tables keep their rows and the
      refresh timers keep running, so switching tabs is instant and never loses
      the scroll position of the section you just left. */
-  function adminSetTab(name) {
+  function adminSetTab(name, fromHash) {
     if (!ADMIN_PANES[name]) name = 'overview';
     ADMIN.tab = name;
+
+    /* Deep links: /admin#users opens the Users tab, survives a refresh, and can
+       be bookmarked. `replaceState` rather than `location.hash =` so the browser
+       does not add one history entry per tab click (the Back button would then
+       walk back through tabs instead of leaving the panel). */
+    if (!fromHash) {
+      try {
+        var want = '#' + name;
+        if (window.history && window.history.replaceState &&
+            window.location.hash !== want) {
+          window.history.replaceState(null, '', want);
+        }
+      } catch (e) { /* file:// and sandboxed frames can refuse this */ }
+    }
 
     Object.keys(ADMIN_PANES).forEach(function (key) {
       var pane = $(ADMIN_PANES[key]);
@@ -4477,6 +4606,14 @@
     // Same handler as beforeunload: endCall() is idempotent, so a double fire
     // (some browsers emit both) cannot break anything.
     window.addEventListener('pagehide', onPageHide);
+
+    /* Back/forward between admin deep links, or a hand-edited #hash. Only acts
+       once the panel is actually open — on the public screens the hash is not
+       ours to touch. */
+    window.addEventListener('hashchange', function () {
+      if (!state.isAdmin) return;
+      adminSetTab(adminTabFromHash(), true);
+    });
   }
 
   // =================================================================== boot
