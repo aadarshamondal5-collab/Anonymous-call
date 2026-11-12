@@ -62,6 +62,27 @@ const PRICE_MIN = 1;
 const PRICE_MAX = 10000;
 const PRODUCT = 'gender_filter';
 
+/* ---- Telegram /start welcome -------------------------------------------- */
+
+/* The Direct Link of the Mini App ("t.me/<bot>/<app>"). A plain `url` button
+ * pointing here opens the Mini App inside Telegram; `web_app` would refuse the
+ * t.me form. Override with LC_BOT_APP_URL if the bot or app slug changes. */
+const BOT_APP_URL = process.env.LC_BOT_APP_URL || 'https://t.me/Linkcallofficialbot/Linkcall';
+
+/* Sent in answer to /start. Kept as one escaped string rather than a template
+ * literal so the \n sequences are explicit and survive any editor that trims
+ * trailing whitespace. parse_mode HTML means the tags below are interpreted and
+ * everything else must be escaped (<, >, &). */
+const WELCOME_TEXT =
+  '👋 <b>Welcome to LinkCall!</b>\n\n' +
+  'India\'s most secure, anonymous audio chat platform. Talk to random strangers, ' +
+  'make new friends, and share your thoughts — <i>safely and without any camera.</i>\n\n' +
+  '✨ <b>Why LinkCall?</b>\n' +
+  '🔒 100% Anonymous &amp; Secure\n' +
+  '🎙 Crystal Clear Audio (P2P)\n' +
+  '🚫 No Sign-up Required\n\n' +
+  'Ready to talk? Tap the button below to start your first call! 👇';
+
 /* Used only when Firestore has no config/app document. PAID + 50 Stars is the
  * safe default: a fresh deploy never gives the paid feature away by accident,
  * and never charges a price nobody chose. */
@@ -104,26 +125,49 @@ function readServiceAccount() {
     text = text.slice(1, -1).trim();
   }
 
-  /* The two things that actually break pasted service accounts: literal \n
-   * sequences standing in for real newlines (fatal inside private_key), and a
-   * base64-wrapped value. */
+  /* Order matters, and getting it wrong here is what made a CORRECT credential
+   * fail with "backend not connected".
+   *
+   * A service-account file contains "private_key": "-----BEGIN...\nMIIE..."
+   * where \n is a two-character JSON escape. Running .replace(/\\n/g, '\n') on
+   * the RAW text before parsing turns those escapes into real newlines INSIDE a
+   * JSON string literal, which is illegal JSON — so the one correct input shape
+   * threw, and every repair attempt then failed too.
+   *
+   * The fix: always try the value as-is FIRST. JSON.parse already converts a
+   * valid \n escape into a newline by itself. Only if that fails do we assume
+   * the value was single-line-ified badly (literal newlines where escapes
+   * belong) and repair it. */
   let parsed = null;
-  try {
-    parsed = JSON.parse(text.replace(/\\n/g, '\n'));
-  } catch (e) {
+  let error = '';
+
+  const attempts = [
+    text,                                             // the normal, correct paste
+    text.replace(/\r\n/g, '\n').replace(/\n/g, '\\n'), // real newlines -> escapes
+    (function () {                                    // base64-wrapped
+      try { return Buffer.from(text, 'base64').toString('utf8'); } catch (e) { return ''; }
+    })()
+  ];
+
+  for (let i = 0; i < attempts.length && !parsed; i++) {
+    const candidate = attempts[i];
+    if (!candidate) continue;
     try {
-      parsed = JSON.parse(Buffer.from(text, 'base64').toString('utf8'));
-    } catch (e2) {
-      appError = 'invalid_json';
-      return null;
+      const value = JSON.parse(candidate);
+      if (value && typeof value === 'object') parsed = value;
+    } catch (e) {
+      if (!error) error = String((e && e.message) || 'parse error');
     }
   }
 
-  if (!parsed || typeof parsed !== 'object') { appError = 'invalid_json'; return null; }
+  if (!parsed) {
+    appError = 'invalid_json';
+    return null;
+  }
 
-  /* private_key arrives with \n escapes far more often than not; normalise even
-   * when the JSON parse already succeeded, because a private_key containing a
-   * literal backslash-n is rejected by the crypto layer, not by JSON.parse. */
+  /* Belt and braces: if a private_key somehow still holds literal backslash-n
+   * (a value that was double-escaped somewhere upstream), unescape it now. The
+   * crypto layer, not JSON, is what rejects it, so it must be clean here. */
   if (typeof parsed.private_key === 'string') {
     parsed.private_key = parsed.private_key.replace(/\\n/g, '\n');
   }
@@ -1331,15 +1375,25 @@ async function routeWebhook(req, res) {
       return send(res, 200, { ok: true });
     }
 
-    /* --- /start: reply with the Mini App button ------------------------- */
+    /* --- /start: reply with the welcome message + Mini App button -------- */
     if (msg && msg.text && String(msg.text).indexOf('/start') === 0) {
-      const url = process.env.LC_WEB_DOMAIN_X7 || '';
-      if (url) {
+      /* The Direct Link to the Mini App. This is the form Telegram documents for
+       * "t.me/<bot>/<app>" and it works as a plain `url` button: Telegram opens
+       * the Mini App rather than an external browser. LC_WEB_DOMAIN_X7 is only a
+       * fallback for a deploy that has not set up a Direct Link yet. */
+      const appUrl = BOT_APP_URL || process.env.LC_WEB_DOMAIN_X7 || '';
+      if (appUrl) {
         await tgCall('sendMessage', {
           chat_id: msg.chat.id,
-          text: 'LinkCall — random audio-only chat. Tap the button below to open it.',
+          text: WELCOME_TEXT,
+          parse_mode: 'HTML',
+          /* disable_web_page_preview is deprecated and ignored by newer Bot API
+           * versions; link_preview_options is the replacement. Sending both
+           * keeps old and new API versions quiet about the link. */
+          disable_web_page_preview: true,
+          link_preview_options: { is_disabled: true },
           reply_markup: {
-            inline_keyboard: [[{ text: '🎧 Open LinkCall', web_app: { url: url } }]]
+            inline_keyboard: [[{ text: '🚀 Start Voice Chat', url: appUrl }]]
           }
         });
       }
