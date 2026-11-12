@@ -127,6 +127,18 @@ function asText(value, max) {
   return String(value === undefined || value === null ? '' : value).slice(0, max || 200);
 }
 
+/* The only gender values the app understands. 'other' was added after the first
+ * release, so this list is the single place to extend — the heartbeat route uses
+ * it for both the user's own gender and the filter they are searching for.
+ * Anything else (including the empty string) is stored as null, which means
+ * "not set" and never filters anyone out. */
+const GENDERS = ['male', 'female', 'other'];
+
+function oneOfGender(value) {
+  const v = asText(value, 16).trim().toLowerCase();
+  return GENDERS.indexOf(v) === -1 ? null : v;
+}
+
 /* =============================================================== 2. responses */
 
 /** Every response is JSON, and never leaks a stack trace. */
@@ -577,7 +589,7 @@ async function listLiveHeartbeats() {
     return {
       id: doc.id,
       name: d.name || '',
-      avatar: d.avatar || '🙂',
+      avatar: d.avatar || '',
       gender: d.gender || null,
       filter: d.filter || null,
       status: d.status || 'idle',
@@ -830,8 +842,8 @@ async function routeHeartbeat(req, res) {
     await handle.collection('heartbeats').doc(id).set({
       name: asText(body.name, 32),
       avatar: asText(body.avatar, 8),
-      gender: body.gender === 'male' || body.gender === 'female' ? body.gender : null,
-      filter: body.filter === 'male' || body.filter === 'female' ? body.filter : null,
+      gender: oneOfGender(body.gender),
+      filter: oneOfGender(body.filter),
       status: status,
       peer_id: asText(body.peer_id, 64) || null,
       since: Number(body.since) || 0,
