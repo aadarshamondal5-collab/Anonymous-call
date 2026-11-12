@@ -75,7 +75,7 @@ const BOT_APP_URL = process.env.LC_BOT_APP_URL || 'https://t.me/Linkcallofficial
  * everything else must be escaped (<, >, &). */
 const WELCOME_TEXT =
   '👋 <b>Welcome to LinkCall!</b>\n\n' +
-  'India\'s most secure, anonymous audio chat platform. Talk to random strangers, ' +
+  'world\'s most secure, anonymous audio chat platform. Talk to random strangers, ' +
   'make new friends, and share your thoughts — <i>safely and without any camera.</i>\n\n' +
   '✨ <b>Why LinkCall?</b>\n' +
   '🔒 100% Anonymous &amp; Secure\n' +
