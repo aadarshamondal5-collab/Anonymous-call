@@ -146,6 +146,14 @@
     background: linear-gradient(180deg, rgba(255, 111, 181, .22), rgba(255, 111, 181, .07));
     box-shadow: 0 0 18px rgba(255, 111, 181, .22), var(--inset);
   }
+  /* Matches .pill.other so the gender colour is consistent everywhere it is
+     shown. Without this rule the "Other" chip fell through to the generic gold
+     [aria-pressed="true"] style and looked like a different kind of control. */
+  .chip[data-g="other"][aria-pressed="true"] {
+    border-color: rgba(167, 139, 250, .7); color: #A78BFA;
+    background: linear-gradient(180deg, rgba(167, 139, 250, .22), rgba(167, 139, 250, .07));
+    box-shadow: 0 0 18px rgba(167, 139, 250, .22), var(--inset);
+  }
   .chip[disabled] { opacity: .5; }
 
   .btn {
@@ -215,24 +223,33 @@
     box-shadow: 0 4px 12px rgba(0, 0, 0, .45), var(--inset);
     transition: transform .12s, border-color .15s, box-shadow .15s, filter .15s;
   }
-  /* The disc art: a soft light source top-left plus a two-stop colour ramp.
-     Pure CSS — no image, no emoji, no 3D transforms. */
+  /* Soft light source top-left so the disc reads as a sphere, not a flat circle. */
   .avatar-btn::before {
     content: ''; position: absolute; inset: 0;
     background: radial-gradient(circle at 32% 24%, rgba(255, 255, 255, .30) 0%, rgba(255, 255, 255, 0) 52%);
   }
-  .av-txt {
+  /* The glyph must scale with the DISC, not with the page's text size. A
+     percentage font-size would resolve against the inherited ~15 px body text
+     and render an 11 px emoji inside a 100 px circle, so the size is clamped
+     against viewport width instead: the tile is one third of the sheet, so
+     roughly 0.33 * 100vw / 3 is its width, and 0.46 of that leaves a clean
+     ring of colour around the face. The clamp keeps it sane on very small and
+     very large phones. */
+  .av-emoji {
     position: relative; z-index: 1;
-    font-size: 15px; font-weight: 800; letter-spacing: .5px;
-    color: rgba(255, 255, 255, .94);
-    text-shadow: 0 1px 3px rgba(0, 0, 0, .45);
+    font-size: clamp(30px, 11.5vw, 50px);
+    line-height: 1;
+    display: block;
+    transform: translateY(-1px);
+    /* Slight shadow so light emoji stay readable on light disc colours. */
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .35));
   }
-  .avatar-btn[data-avatar="a1"] { background: linear-gradient(160deg, #4C8DFF 0%, #24439C 100%); }
-  .avatar-btn[data-avatar="a2"] { background: linear-gradient(160deg, #FF6FB5 0%, #A32E68 100%); }
-  .avatar-btn[data-avatar="a3"] { background: linear-gradient(160deg, #3DDC97 0%, #0F7A55 100%); }
-  .avatar-btn[data-avatar="a4"] { background: linear-gradient(160deg, #FFD400 0%, #A67C00 100%); }
-  .avatar-btn[data-avatar="a5"] { background: linear-gradient(160deg, #A78BFA 0%, #5B32C4 100%); }
-  .avatar-btn[data-avatar="a6"] { background: linear-gradient(160deg, #FF9F43 0%, #A34F00 100%); }
+  .avatar-btn[data-avatar="cat"] { background: linear-gradient(160deg, #4C8DFF 0%, #24439C 100%); }
+  .avatar-btn[data-avatar="fox"] { background: linear-gradient(160deg, #FF9F43 0%, #A34F00 100%); }
+  .avatar-btn[data-avatar="panda"] { background: linear-gradient(160deg, #6B7280 0%, #262B36 100%); }
+  .avatar-btn[data-avatar="penguin"] { background: linear-gradient(160deg, #38BDF8 0%, #075985 100%); }
+  .avatar-btn[data-avatar="koala"] { background: linear-gradient(160deg, #A78BFA 0%, #5B32C4 100%); }
+  .avatar-btn[data-avatar="lion"] { background: linear-gradient(160deg, #FFD400 0%, #A67C00 100%); }
   .avatar-btn:active { transform: scale(.94); }
   .avatar-btn[aria-pressed="true"] {
     border-color: rgba(255, 255, 255, .85);
@@ -240,11 +257,11 @@
     filter: saturate(1.15) brightness(1.08);
   }
   .avatar-btn[aria-pressed="true"]::after {
-    content: '✓'; position: absolute; right: 5px; bottom: 4px; z-index: 1;
-    font-size: 10px; font-weight: 900; color: #fff;
-    width: 15px; height: 15px; border-radius: 50%;
+    content: '✓'; position: absolute; right: 4px; bottom: 3px; z-index: 2;
+    font-size: 9px; font-weight: 900; color: #fff;
+    width: 14px; height: 14px; border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
-    background: rgba(0, 0, 0, .55); border: 1px solid rgba(255, 255, 255, .5);
+    background: rgba(0, 0, 0, .6); border: 1px solid rgba(255, 255, 255, .55);
   }
 
   /* ---------------- home ---------------- */
@@ -453,19 +470,19 @@
     content: ''; position: absolute; inset: 0;
     background: radial-gradient(circle at 32% 24%, rgba(255, 255, 255, .30) 0%, rgba(255, 255, 255, 0) 54%);
   }
-  /* paintAvatar() sets data-avatar on this element too, so the colour ramp
-     matches whatever the partner picked on their own onboarding screen. */
-  .big-avatar[data-avatar="a1"] { background: linear-gradient(160deg, #4C8DFF 0%, #24439C 100%); }
-  .big-avatar[data-avatar="a2"] { background: linear-gradient(160deg, #FF6FB5 0%, #A32E68 100%); }
-  .big-avatar[data-avatar="a3"] { background: linear-gradient(160deg, #3DDC97 0%, #0F7A55 100%); }
-  .big-avatar[data-avatar="a4"] { background: linear-gradient(160deg, #FFD400 0%, #A67C00 100%); }
-  .big-avatar[data-avatar="a5"] { background: linear-gradient(160deg, #A78BFA 0%, #5B32C4 100%); }
-  .big-avatar[data-avatar="a6"] { background: linear-gradient(160deg, #FF9F43 0%, #A34F00 100%); }
-  .big-avatar .av-txt {
+  /* paintAvatar() sets data-avatar on this element too, so the disc colour and
+     emoji match whatever the partner picked on their own onboarding screen. */
+  .big-avatar[data-avatar="cat"] { background: linear-gradient(160deg, #4C8DFF 0%, #24439C 100%); }
+  .big-avatar[data-avatar="fox"] { background: linear-gradient(160deg, #FF9F43 0%, #A34F00 100%); }
+  .big-avatar[data-avatar="panda"] { background: linear-gradient(160deg, #6B7280 0%, #262B36 100%); }
+  .big-avatar[data-avatar="penguin"] { background: linear-gradient(160deg, #38BDF8 0%, #075985 100%); }
+  .big-avatar[data-avatar="koala"] { background: linear-gradient(160deg, #A78BFA 0%, #5B32C4 100%); }
+  .big-avatar[data-avatar="lion"] { background: linear-gradient(160deg, #FFD400 0%, #A67C00 100%); }
+  .big-avatar .av-emoji {
     position: relative; z-index: 1;
-    font-size: 44px; font-weight: 800; letter-spacing: 1px;
-    color: rgba(255, 255, 255, .96);
-    text-shadow: 0 3px 10px rgba(0, 0, 0, .55);
+    font-size: 62px; line-height: 1;
+    display: block;
+    filter: drop-shadow(0 3px 8px rgba(0, 0, 0, .5));
   }
   .ring-wrap.searching .big-avatar { animation: breathe 1.6s ease-in-out infinite; }
 
@@ -867,6 +884,21 @@
   }
   .a-notice.danger { border-color: rgba(255, 77, 109, .45); color: #FFC2CD; background: linear-gradient(180deg, rgba(255, 77, 109, .14), rgba(255, 77, 109, .05)); }
   .a-notice.ok { border-color: rgba(61, 220, 151, .4); color: #9CF0CC; background: linear-gradient(180deg, rgba(61, 220, 151, .12), rgba(61, 220, 151, .04)); }
+  /* Inline text button inside the warning notice, plus the JSON dump it reveals.
+     Kept small so a connected backend shows nothing extra at all. */
+  .a-link {
+    display: inline-block; margin-top: 8px; padding: 0; border: 0; background: none;
+    color: inherit; font: inherit; font-weight: 800; text-decoration: underline;
+    cursor: pointer; opacity: .9;
+  }
+  .a-link:active { opacity: .6; }
+  .a-diag {
+    margin: 8px 0 0; padding: 8px 10px; border-radius: var(--r-md);
+    background: rgba(0, 0, 0, .32); border: 1px solid rgba(255, 255, 255, .12);
+    color: #E7E3FF; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px; line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+    max-height: 220px; overflow: auto;
+  }
 
   /* ---------------- telegram mini app ---------------- */
   /* Telegram injects its own viewport vars; when they exist we trust them over
@@ -915,10 +947,10 @@
       linear-gradient(165deg, rgba(255, 255, 255, .98), rgba(226, 222, 243, .98));
     border-color: rgba(255, 170, 0, .5);
   }
-  body.tg[data-tg-theme="light"] .avatar-btn,
+  /* NOTE: .avatar-btn and .big-avatar are deliberately NOT in this list. They
+     carry their own six-colour ramps and this light-theme wash would flatten
+     every disc to the same white, making the avatar picker unusable. */
   body.tg[data-tg-theme="light"] .ended-orb,
-  body.tg[data-tg-theme="light"] .big-avatar,
-  body.tg[data-tg-theme="light"] .chat-panel,
   body.tg[data-tg-theme="light"] #toast {
     background:
       radial-gradient(circle at 34% 26%, rgba(255, 255, 255, .9) 0%, transparent 46%),
@@ -926,14 +958,8 @@
     color: var(--text);
     border-color: var(--border-2);
   }
-  body.tg[data-tg-theme="light"] .chat-panel,
   body.tg[data-tg-theme="light"] .ended-orb {
     background: linear-gradient(165deg, rgba(255, 255, 255, .98), rgba(228, 224, 245, .99));
-  }
-  body.tg[data-tg-theme="light"] .bubble:not(.mine) {
-    background: linear-gradient(180deg, rgba(255, 255, 255, .98), rgba(232, 228, 246, .98));
-    color: var(--text);
-    border-color: var(--border);
   }
   body.tg[data-tg-theme="light"] .ended-title { text-shadow: none; }
   body.tg[data-tg-theme="light"] .peer-name { text-shadow: none; }
@@ -957,16 +983,16 @@
 
     <div class="card">
       <label class="label" for="nick">Your name</label>
-      <input id="nick" class="input" type="text" maxlength="24" placeholder="Guest" autocomplete="nickname" enterkeyhint="done">
+      <input id="nick" class="input" type="text" maxlength="24" placeholder="" autocomplete="nickname" enterkeyhint="done">
 
       <span class="label spaced">Avatar</span>
       <div class="avatar-row" id="avatarRow" role="group" aria-label="Avatar">
-        <button class="avatar-btn" data-avatar="a1" aria-pressed="true" type="button" aria-label="Avatar 1"><span class="av-txt"></span></button>
-        <button class="avatar-btn" data-avatar="a2" aria-pressed="false" type="button" aria-label="Avatar 2"><span class="av-txt"></span></button>
-        <button class="avatar-btn" data-avatar="a3" aria-pressed="false" type="button" aria-label="Avatar 3"><span class="av-txt"></span></button>
-        <button class="avatar-btn" data-avatar="a4" aria-pressed="false" type="button" aria-label="Avatar 4"><span class="av-txt"></span></button>
-        <button class="avatar-btn" data-avatar="a5" aria-pressed="false" type="button" aria-label="Avatar 5"><span class="av-txt"></span></button>
-        <button class="avatar-btn" data-avatar="a6" aria-pressed="false" type="button" aria-label="Avatar 6"><span class="av-txt"></span></button>
+        <button class="avatar-btn" data-avatar="cat" aria-pressed="true" type="button" aria-label="Cat"><span class="av-emoji">🐱</span></button>
+        <button class="avatar-btn" data-avatar="fox" aria-pressed="false" type="button" aria-label="Fox"><span class="av-emoji">🦊</span></button>
+        <button class="avatar-btn" data-avatar="panda" aria-pressed="false" type="button" aria-label="Panda"><span class="av-emoji">🐼</span></button>
+        <button class="avatar-btn" data-avatar="penguin" aria-pressed="false" type="button" aria-label="Penguin"><span class="av-emoji">🐧</span></button>
+        <button class="avatar-btn" data-avatar="koala" aria-pressed="false" type="button" aria-label="Koala"><span class="av-emoji">🐨</span></button>
+        <button class="avatar-btn" data-avatar="lion" aria-pressed="false" type="button" aria-label="Lion"><span class="av-emoji">🦁</span></button>
       </div>
 
       <span class="label spaced">I am</span>
@@ -993,7 +1019,7 @@
 <section class="screen" id="home">
   <div class="topbar">
     <div class="who">
-      <h2 class="who-name" id="homeName">Guest</h2>
+      <h2 class="who-name" id="homeName"></h2>
       <p class="status"><span class="dot" id="netDot"></span><span id="netText">Connecting…</span></p>
     </div>
     <button class="icon-btn" id="settingsBtn" type="button" aria-label="Settings" title="Settings">⚙</button>
@@ -1043,7 +1069,7 @@
   <div class="peer-stage">
     <div class="ring-wrap searching" id="ringWrap">
       <span class="ring"></span><span class="ring"></span><span class="ring"></span>
-      <div class="big-avatar" id="peerAvatar"><span class="av-txt"></span></div>
+      <div class="big-avatar" id="peerAvatar"><span class="av-emoji">🐱</span></div>
     </div>
     <div class="peer-name" id="peerNameBig">Stranger</div>
     <p class="peer-sub" id="peerSub">Ringing…</p>
@@ -1198,9 +1224,10 @@
       </div>
 
       <div class="a-notice danger" id="adminCfgWarn">
-        <strong>Backend not connected.</strong> Firebase environment variables are missing or the API
-        routes were not deployed. Every number below stays empty until
-        <code>LC_FIREBASE_CRED_JSON_33</code> is set.
+        <strong>Backend not connected.</strong>
+        <span id="adminCfgWhy">Firebase is not reachable from this deployment.</span>
+        <button class="a-link" id="adminDiagBtn" type="button">Run connection test</button>
+        <pre class="a-diag hidden" id="adminDiagOut"></pre>
       </div>
 
       <div class="a-tabs" id="adminTabs" role="tablist" aria-label="Admin sections">
@@ -1543,41 +1570,49 @@
     return String(Math.floor(safe / 60)).padStart(2, '0') + ':' + String(safe % 60).padStart(2, '0');
   }
 
-  function initialOf(name) {
-    var s = String(name || '?').trim();
-    return s ? s.charAt(0).toUpperCase() : '?';
-  }
-
   /* ----------------------------------------------------------- avatars
-     Avatars are drawn, not typed. Older profile records stored an emoji in
-     state.me.avatar; those are mapped onto the nearest new disc so nobody ends
-     up with a stray emoji on their call screen after this change. */
-  var AVATAR_KEYS = ['a1', 'a2', 'a3', 'a4', 'a5', 'a6'];
-  var AVATAR_LEGACY = { '🙂': 'a1', '😎': 'a2', '🌸': 'a2', '🎧': 'a5' };
+     Avatars are one emoji on a coloured disc. The six keys are stable names,
+     not the glyphs themselves, so the art can be restyled later without
+     invalidating saved profiles. Older profiles stored an emoji directly; those
+     are mapped onto the nearest key so nobody loses their avatar. */
+  var AVATAR_KEYS = ['cat', 'fox', 'panda', 'penguin', 'koala', 'lion'];
+  var AVATAR_EMOJI = {
+    cat: '🐱', fox: '🦊', panda: '🐼', penguin: '🐧', koala: '🐨', lion: '🦁'
+  };
+  /* Everything ever stored previously, including the a1..a6 keys from the
+     short-lived gradient-only build and the original free-choice emoji. */
+  var AVATAR_LEGACY = {
+    a1: 'cat', a2: 'fox', a3: 'panda', a4: 'penguin', a5: 'koala', a6: 'lion',
+    '🙂': 'cat', '😎': 'fox', '🌸': 'koala', '🎧': 'panda'
+  };
 
   function normalizeAvatar(value) {
-    var v = String(value || '');
+    var v = String(value || '').trim();
     if (AVATAR_KEYS.indexOf(v) !== -1) return v;
     if (AVATAR_LEGACY[v]) return AVATAR_LEGACY[v];
-    /* Anything else (including an empty value) gets a stable disc derived from
-       the string, so the same person keeps the same colour between calls. */
+    /* An emoji we no longer offer: match by glyph. */
+    for (var k in AVATAR_EMOJI) {
+      if (AVATAR_EMOJI[k] === v) return k;
+    }
+    /* Anything else gets a stable disc derived from the string, so the same
+       person keeps the same avatar between calls. */
     var sum = 0;
     for (var i = 0; i < v.length; i++) sum += v.charCodeAt(i);
     return AVATAR_KEYS[sum % AVATAR_KEYS.length];
   }
 
   /* Fill an element with the disc art + monogram for an avatar key. */
-  function paintAvatar(el, avatarValue, name) {
+  function paintAvatar(el, avatarValue) {
     if (!el) return;
     var key = normalizeAvatar(avatarValue);
     el.setAttribute('data-avatar', key);
-    var txt = el.querySelector('.av-txt');
-    if (!txt) {
-      txt = document.createElement('span');
-      txt.className = 'av-txt';
-      el.appendChild(txt);
+    var face = el.querySelector('.av-emoji');
+    if (!face) {
+      face = document.createElement('span');
+      face.className = 'av-emoji';
+      el.appendChild(face);
     }
-    txt.textContent = initialOf(name);
+    face.textContent = AVATAR_EMOJI[key] || AVATAR_EMOJI.cat;
   }
 
   var toastTimer = null;
@@ -3273,7 +3308,7 @@
     var name = (partner && partner.name) || 'Stranger';
     $('peerName').textContent = name;
     $('peerNameBig').textContent = name;
-    paintAvatar($('peerAvatar'), partner && partner.avatar, name);
+    paintAvatar($('peerAvatar'), partner && partner.avatar);
   }
 
   function setPeerStatus(text) {
@@ -3289,7 +3324,9 @@
   }
 
   function renderSettings() {
-    $('stName').textContent = state.me ? (state.me.name || 'Guest') : '—';
+    $('stName').textContent = state.me && state.me.name && state.me.name !== 'Guest'
+      ? state.me.name
+      : 'Not set';
     $('stGender').textContent = genderLabel(state.me ? state.me.gender : null);
     $('stStatus').textContent = state.ready ? 'Connected' : 'Offline';
     $('stRoom').textContent = lobbySlug();
@@ -3302,8 +3339,12 @@
     return 'Not set';
   }
 
+  /* syncSelfCard repaints the avatar/gender selection. It must NOT rewrite the
+     name box: the Telegram prefill lives there before a profile is chosen, and
+     tapping an avatar calls this function — writing state.me.name back would
+     wipe the prefill the moment the user picked a picture. The box is only ever
+     populated by the prefill or by the user's own typing. */
   function syncSelfCard() {
-    $('nick').value = state.me ? state.me.name : '';
     var mine = normalizeAvatar(state.me ? state.me.avatar : '');
     paintAvatarRow();
     Array.prototype.forEach.call($('avatarRow').children, function (btn) {
@@ -3320,9 +3361,8 @@
   function paintAvatarRow() {
     var row = $('avatarRow');
     if (!row) return;
-    var name = ($('nick').value || '').trim() || 'Guest';
     Array.prototype.forEach.call(row.children, function (btn) {
-      paintAvatar(btn, btn.getAttribute('data-avatar'), name);
+      paintAvatar(btn, btn.getAttribute('data-avatar'));
     });
   }
 
@@ -3358,7 +3398,7 @@
     state.me = {
       id: state.me ? state.me.id : uid(),
       name: name,
-      avatar: pressed ? normalizeAvatar(pressed.getAttribute('data-avatar')) : 'a1',
+      avatar: pressed ? normalizeAvatar(pressed.getAttribute('data-avatar')) : 'cat',
       gender: genderBtn ? genderBtn.getAttribute('data-g') : null
     };
     saveStored();
@@ -3655,11 +3695,58 @@
   }
 
   /* ------------------------------------------------------------- A. stats */
+
+  /* "Run connection test" — fetches the public /api/health endpoint and shows
+     the raw answer. The endpoint is deliberately public so the same URL can be
+     opened directly in a browser, which is often easier to share than this
+     panel. Output is a plain dump: when something is wrong, the exact missing
+     variable name is more useful than a friendly sentence. */
+  function adminRunDiagnostics() {
+    var out = $('adminDiagOut');
+    var btn = $('adminDiagBtn');
+    out.classList.remove('hidden');
+    out.textContent = 'Testing…';
+    btn.disabled = true;
+
+    fetch('/api/health', { headers: { Accept: 'application/json' } })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        out.textContent = JSON.stringify(res, null, 2);
+        /* Print a plain-language verdict first, because reading JSON is not
+           everyone's idea of a good time. */
+        var lines = [];
+        if (res.backend === 'live' && res.firestore === 'reachable') {
+          lines.push('OK: Firebase is configured and Firestore answered.');
+        } else if (res.backend === 'live') {
+          lines.push('Credentials loaded, but Firestore could not be read.');
+        } else {
+          lines.push('Backend is offline.');
+        }
+        if (res.hint) lines.push(res.hint);
+        var missing = [];
+        var env = res.env || {};
+        ['credential', 'databaseUrl', 'botToken', 'webhookSecret', 'adminUser', 'adminPass', 'tokenSecret']
+          .forEach(function (k) { if (!env[k]) missing.push(k); });
+        if (missing.length) lines.push('Missing environment variables: ' + missing.join(', ') + '.');
+        out.textContent = lines.join('\n') + '\n\n' + out.textContent;
+      })
+      .catch(function () {
+        out.textContent = 'Could not reach /api/health. The deployment may be down, or the rewrite for /api is missing.';
+      })
+      .then(function () { btn.disabled = false; });
+  }
+
   function adminLoadStats() {
     return adminGet('/api/admin/stats').then(function (res) {
       if (!res) return;
       var offline = !res.ok || res.backend === 'offline';
       $('adminCfgWarn').classList.toggle('hidden', !offline);
+      if (offline) {
+        /* Say WHY. A generic "not connected" makes people re-paste credentials
+           that were already correct; the server now names the actual cause. */
+        var why = res.hint || res.error || 'Firebase is not reachable from this deployment.';
+        $('adminCfgWhy').textContent = why;
+      }
 
       $('stTotalUsers').textContent = offline ? '—' : String(res.totalUsers || 0);
       $('stOnline').textContent = offline ? '—' : String(res.onlineNow || 0);
@@ -4187,6 +4274,7 @@
     $('adminPass').addEventListener('keydown', function (e) { if (e.key === 'Enter') adminLogin(); });
     $('adminId').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('adminPass').focus(); });
     $('adminLogout').addEventListener('click', function () { adminLogout(); });
+    $('adminDiagBtn').addEventListener('click', adminRunDiagnostics);
 
     $('payToggle').addEventListener('change', function () { adminTogglePayment(this.checked); });
 
@@ -4288,8 +4376,6 @@
     $('nick').addEventListener('keydown', function (e) {
       if (e.key === 'Enter') startFromOnboarding();
     });
-    // Keep the avatar monograms showing the user's initial as they type.
-    $('nick').addEventListener('input', paintAvatarRow);
 
     $('avatarRow').addEventListener('click', function (e) {
       var btn = e.target.closest('[data-avatar]');
@@ -4452,7 +4538,7 @@
       if (urlLobby) toast('Lobby: ' + urlLobby);
     } else {
       state.lobby = urlLobby || CONFIG.LOBBY;
-      state.me = { id: uid(), name: 'Guest', avatar: 'a1', gender: null };
+      state.me = { id: uid(), name: 'Guest', avatar: 'cat', gender: null };
       syncSelfCard();
       showScreen('onboard');
     }
