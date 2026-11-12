@@ -73,6 +73,14 @@
   button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; }
   input { font: inherit; color: inherit; }
 
+  /* The remote-audio sink is a real element on the page (not display:none, or
+     it could not play). Take it out of layout without hiding it. */
+  #remoteAudio {
+    position: fixed; width: 1px; height: 1px;
+    left: -10px; bottom: -10px;
+    opacity: 0.01; pointer-events: none;
+  }
+
   /* ---------------- screens ---------------- */
   .screen {
     position: fixed; inset: 0; display: none; flex-direction: column;
@@ -197,24 +205,46 @@
   #onboard .card, #onboard .intro { max-width: 460px; width: 100%; margin: 0 auto; }
   #onboard .intro { margin-bottom: 20px; }
 
-  .avatar-row { display: flex; gap: 8px; }
+  .avatar-row { display: flex; gap: 8px; flex-wrap: wrap; }
   .avatar-btn {
-    flex: 1; aspect-ratio: 1; border-radius: 50%;
+    flex: 1 1 calc(33.333% - 8px); max-width: calc(33.333% - 8px);
+    aspect-ratio: 1; border-radius: 50%;
     border: 1px solid var(--border-2);
-    background:
-      radial-gradient(circle at 34% 26%, rgba(255, 255, 255, .18) 0%, transparent 46%),
-      linear-gradient(165deg, rgba(58, 54, 88, .92) 0%, rgba(26, 24, 42, .95) 100%);
-    font-size: 22px; display: flex; align-items: center; justify-content: center;
+    display: flex; align-items: center; justify-content: center;
+    position: relative; overflow: hidden;
     box-shadow: 0 4px 12px rgba(0, 0, 0, .45), var(--inset);
-    transition: transform .12s, border-color .15s, box-shadow .15s;
+    transition: transform .12s, border-color .15s, box-shadow .15s, filter .15s;
   }
+  /* The disc art: a soft light source top-left plus a two-stop colour ramp.
+     Pure CSS — no image, no emoji, no 3D transforms. */
+  .avatar-btn::before {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(circle at 32% 24%, rgba(255, 255, 255, .30) 0%, rgba(255, 255, 255, 0) 52%);
+  }
+  .av-txt {
+    position: relative; z-index: 1;
+    font-size: 15px; font-weight: 800; letter-spacing: .5px;
+    color: rgba(255, 255, 255, .94);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, .45);
+  }
+  .avatar-btn[data-avatar="a1"] { background: linear-gradient(160deg, #4C8DFF 0%, #24439C 100%); }
+  .avatar-btn[data-avatar="a2"] { background: linear-gradient(160deg, #FF6FB5 0%, #A32E68 100%); }
+  .avatar-btn[data-avatar="a3"] { background: linear-gradient(160deg, #3DDC97 0%, #0F7A55 100%); }
+  .avatar-btn[data-avatar="a4"] { background: linear-gradient(160deg, #FFD400 0%, #A67C00 100%); }
+  .avatar-btn[data-avatar="a5"] { background: linear-gradient(160deg, #A78BFA 0%, #5B32C4 100%); }
+  .avatar-btn[data-avatar="a6"] { background: linear-gradient(160deg, #FF9F43 0%, #A34F00 100%); }
   .avatar-btn:active { transform: scale(.94); }
   .avatar-btn[aria-pressed="true"] {
-    border-color: rgba(255, 212, 0, .75);
-    background:
-      radial-gradient(circle at 34% 26%, rgba(255, 255, 255, .35) 0%, transparent 46%),
-      linear-gradient(165deg, rgba(255, 212, 0, .26) 0%, rgba(140, 105, 0, .22) 100%);
-    box-shadow: 0 0 22px rgba(255, 212, 0, .35), var(--inset);
+    border-color: rgba(255, 255, 255, .85);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, .38), 0 0 20px rgba(255, 255, 255, .28), var(--inset);
+    filter: saturate(1.15) brightness(1.08);
+  }
+  .avatar-btn[aria-pressed="true"]::after {
+    content: '✓'; position: absolute; right: 5px; bottom: 4px; z-index: 1;
+    font-size: 10px; font-weight: 900; color: #fff;
+    width: 15px; height: 15px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0, 0, 0, .55); border: 1px solid rgba(255, 255, 255, .5);
   }
 
   /* ---------------- home ---------------- */
@@ -407,19 +437,35 @@
   }
 
   .big-avatar {
-    position: relative; z-index: 2;
+    position: relative; z-index: 2; overflow: hidden;
     width: 118px; height: 118px; border-radius: 50%;
-    background:
-      radial-gradient(circle at 34% 26%, rgba(255, 255, 255, .42) 0%, transparent 44%),
-      linear-gradient(165deg, rgba(70, 66, 104, .96) 0%, rgba(26, 24, 42, .98) 100%);
+    background: linear-gradient(165deg, rgba(70, 66, 104, .96) 0%, rgba(26, 24, 42, .98) 100%);
     border: 1px solid rgba(255, 212, 0, .48);
     display: flex; align-items: center; justify-content: center;
-    font-size: 46px;
     box-shadow:
       0 8px 20px rgba(0, 0, 0, .55),
       0 30px 56px -18px rgba(0, 0, 0, .85),
       0 0 46px -8px rgba(255, 212, 0, .28),
       var(--inset);
+  }
+  /* Same light-source highlight as the small discs, scaled up. */
+  .big-avatar::before {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(circle at 32% 24%, rgba(255, 255, 255, .30) 0%, rgba(255, 255, 255, 0) 54%);
+  }
+  /* paintAvatar() sets data-avatar on this element too, so the colour ramp
+     matches whatever the partner picked on their own onboarding screen. */
+  .big-avatar[data-avatar="a1"] { background: linear-gradient(160deg, #4C8DFF 0%, #24439C 100%); }
+  .big-avatar[data-avatar="a2"] { background: linear-gradient(160deg, #FF6FB5 0%, #A32E68 100%); }
+  .big-avatar[data-avatar="a3"] { background: linear-gradient(160deg, #3DDC97 0%, #0F7A55 100%); }
+  .big-avatar[data-avatar="a4"] { background: linear-gradient(160deg, #FFD400 0%, #A67C00 100%); }
+  .big-avatar[data-avatar="a5"] { background: linear-gradient(160deg, #A78BFA 0%, #5B32C4 100%); }
+  .big-avatar[data-avatar="a6"] { background: linear-gradient(160deg, #FF9F43 0%, #A34F00 100%); }
+  .big-avatar .av-txt {
+    position: relative; z-index: 1;
+    font-size: 44px; font-weight: 800; letter-spacing: 1px;
+    color: rgba(255, 255, 255, .96);
+    text-shadow: 0 3px 10px rgba(0, 0, 0, .55);
   }
   .ring-wrap.searching .big-avatar { animation: breathe 1.6s ease-in-out infinite; }
 
@@ -468,47 +514,6 @@
     box-shadow: 0 6px 18px rgba(255, 77, 109, .35), var(--inset);
   }
   .ctrl[disabled] { opacity: .35; pointer-events: none; }
-
-  .chat-panel {
-    position: absolute; left: 12px; right: 12px;
-    bottom: calc(var(--safe-b) + 158px); max-height: 40vh;
-    display: none; flex-direction: column; gap: 8px; padding: 12px;
-    border-radius: var(--r-lg);
-    background: linear-gradient(180deg, rgba(40, 37, 62, .97) 0%, rgba(14, 13, 24, .98) 100%);
-    border: 1px solid var(--border-2);
-    box-shadow: 0 -12px 40px -8px rgba(0, 0, 0, .9), var(--inset);
-    z-index: 5;
-  }
-  .chat-panel.open { display: flex; }
-  .chat-log {
-    flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; min-height: 40px;
-    /* Explicit LTR: some Android WebViews inherit RTL from the Telegram locale and
-       then mirror bubble alignment, which makes messages look reversed. */
-    direction: ltr; text-align: start;
-  }
-  .bubble {
-    max-width: 82%; padding: 8px 12px; border-radius: 14px;
-    font-size: 13px; line-height: 1.4; word-break: break-word;
-    background: linear-gradient(180deg, rgba(70, 66, 104, .95), rgba(40, 37, 62, .95));
-    color: var(--text);
-    align-self: flex-start;
-    border-bottom-left-radius: 4px;
-    border: 1px solid var(--border);
-    box-shadow: 0 3px 10px rgba(0, 0, 0, .40), inset 0 1px 0 rgba(255, 255, 255, .08);
-    /* Keep message text left-to-right even for mixed-script content. */
-    unicode-bidi: plaintext;
-    direction: ltr; text-align: left;
-  }
-  .bubble.mine {
-    align-self: flex-end;
-    background: linear-gradient(180deg, #FFE04D 0%, var(--primary) 55%, var(--primary-2) 100%);
-    color: var(--primary-ink); border-color: transparent;
-    border-bottom-left-radius: 14px; border-bottom-right-radius: 4px;
-    box-shadow: 0 4px 14px rgba(255, 170, 0, .36), inset 0 1px 0 rgba(255, 255, 255, .5);
-  }
-  .chat-row { display: flex; gap: 8px; }
-  .chat-row .input { padding: 10px 12px; font-size: 14px; border-radius: var(--r-pill); }
-  .chat-row button { flex: none; }
 
   /* ---------------- sheets ---------------- */
   .sheet-wrap {
@@ -722,6 +727,7 @@
   .pill.mute { color: var(--muted); border-color: var(--border); background: rgba(255, 255, 255, .04); }
   .pill.male { color: var(--male); border-color: rgba(76, 141, 255, .42); background: rgba(76, 141, 255, .12); }
   .pill.female { color: var(--female); border-color: rgba(255, 111, 181, .42); background: rgba(255, 111, 181, .12); }
+  .pill.other { color: #A78BFA; border-color: rgba(167, 139, 250, .42); background: rgba(167, 139, 250, .12); }
   .pill.dot-red::before {
     content: ''; display: inline-block; width: 5px; height: 5px; border-radius: 50%;
     background: var(--danger); margin-right: 5px; vertical-align: middle;
@@ -946,7 +952,7 @@
   <div class="scroll">
     <div class="intro">
       <h1 class="brand">LinkCall</h1>
-      <p class="tagline">Talk to a random stranger by voice — audio only, no camera. No signup, no install, just your browser.</p>
+      <p class="tagline">Talk to a random stranger by voice. No signup, no install.</p>
     </div>
 
     <div class="card">
@@ -955,16 +961,19 @@
 
       <span class="label spaced">Avatar</span>
       <div class="avatar-row" id="avatarRow" role="group" aria-label="Avatar">
-        <button class="avatar-btn" data-avatar="🙂" aria-pressed="true" type="button" aria-label="Avatar 1">🙂</button>
-        <button class="avatar-btn" data-avatar="😎" aria-pressed="false" type="button" aria-label="Avatar 2">😎</button>
-        <button class="avatar-btn" data-avatar="🌸" aria-pressed="false" type="button" aria-label="Avatar 3">🌸</button>
-        <button class="avatar-btn" data-avatar="🎧" aria-pressed="false" type="button" aria-label="Avatar 4">🎧</button>
+        <button class="avatar-btn" data-avatar="a1" aria-pressed="true" type="button" aria-label="Avatar 1"><span class="av-txt"></span></button>
+        <button class="avatar-btn" data-avatar="a2" aria-pressed="false" type="button" aria-label="Avatar 2"><span class="av-txt"></span></button>
+        <button class="avatar-btn" data-avatar="a3" aria-pressed="false" type="button" aria-label="Avatar 3"><span class="av-txt"></span></button>
+        <button class="avatar-btn" data-avatar="a4" aria-pressed="false" type="button" aria-label="Avatar 4"><span class="av-txt"></span></button>
+        <button class="avatar-btn" data-avatar="a5" aria-pressed="false" type="button" aria-label="Avatar 5"><span class="av-txt"></span></button>
+        <button class="avatar-btn" data-avatar="a6" aria-pressed="false" type="button" aria-label="Avatar 6"><span class="av-txt"></span></button>
       </div>
 
       <span class="label spaced">I am</span>
       <div class="chips" id="genderPick" role="group" aria-label="Gender">
         <button class="chip" data-g="male" aria-pressed="false" type="button">Male</button>
         <button class="chip" data-g="female" aria-pressed="false" type="button">Female</button>
+        <button class="chip" data-g="other" aria-pressed="false" type="button">Other</button>
       </div>
       <p class="hint">Optional. Gender powers the matchmaking filter — it only works when both sides have set it.</p>
 
@@ -1007,6 +1016,7 @@
         <button class="chip" data-f="" aria-pressed="true" type="button">Anyone</button>
         <button class="chip" data-f="female" aria-pressed="false" type="button">Female</button>
         <button class="chip" data-f="male" aria-pressed="false" type="button">Male</button>
+        <button class="chip" data-f="other" aria-pressed="false" type="button">Other</button>
       </div>
       <p class="pay-note hidden" id="payNote">
         <span id="payText">Unlock the gender filter.</span>
@@ -1014,18 +1024,13 @@
       </p>
     </div>
     <button class="btn btn-primary" id="primaryBtn" type="button">Start voice call</button>
-    <button class="btn btn-ghost hidden" id="channelBtn" type="button">
-      <span aria-hidden="true">📢</span> Join our Channel
-    </button>
-    <button class="btn btn-ghost" id="shareBtn" type="button">
-      <span aria-hidden="true">📤</span> Invite your friends
-    </button>
+    <button class="btn btn-ghost hidden" id="channelBtn" type="button">Broadcast Channel</button>
+    <button class="btn btn-ghost" id="shareBtn" type="button">Invite your friends</button>
   </div>
 </section>
 
 <!-- ============ CALL (audio only) ============ -->
 <section class="screen" id="call">
-  <audio id="remoteAudio" autoplay playsinline></audio>
 
   <div class="call-top">
     <div>
@@ -1038,7 +1043,7 @@
   <div class="peer-stage">
     <div class="ring-wrap searching" id="ringWrap">
       <span class="ring"></span><span class="ring"></span><span class="ring"></span>
-      <div class="big-avatar" id="peerAvatar">🙂</div>
+      <div class="big-avatar" id="peerAvatar"><span class="av-txt"></span></div>
     </div>
     <div class="peer-name" id="peerNameBig">Stranger</div>
     <p class="peer-sub" id="peerSub">Ringing…</p>
@@ -1047,19 +1052,10 @@
     </div>
   </div>
 
-  <div class="chat-panel" id="chatPanel">
-    <div class="chat-log" id="chatLog"></div>
-    <div class="chat-row">
-      <input class="input" id="chatInput" type="text" maxlength="300" placeholder="Message…" enterkeyhint="send">
-      <button class="btn btn-primary btn-send" id="chatSend" type="button">Send</button>
-    </div>
-  </div>
-
   <div class="call-bottom">
     <div class="controls">
       <button class="ctrl" id="micBtn" type="button"><span class="ico">🎤</span><span id="micLabel">Mute</span></button>
       <button class="ctrl" id="speakerBtn" type="button"><span class="ico">🔊</span><span id="speakerLabel">Speaker</span></button>
-      <button class="ctrl" id="chatBtn" type="button"><span class="ico">💬</span><span>Chat</span></button>
       <button class="ctrl" id="reportBtn" type="button" aria-label="Report user"><span class="ico">🚩</span><span>Report</span></button>
     </div>
     <button class="btn btn-danger" id="nextBtn" type="button">Next person</button>
@@ -1091,19 +1087,16 @@
       <button class="icon-btn" data-close-sheet type="button" aria-label="Close">✕</button>
     </div>
 
-    <span class="label">Connection</span>
+    <span class="label">Your profile</span>
+    <div class="kv"><span>Name</span><span id="stName">—</span></div>
+    <div class="kv"><span>Gender</span><span id="stGender">—</span></div>
     <div class="kv"><span>Status</span><span id="stStatus">—</span></div>
-    <div class="kv"><span>Lobby</span><span id="stRoom">—</span></div>
-    <div class="kv"><span>Signalling</span><span id="stBroker">—</span></div>
-    <div class="kv"><span>Peers online</span><span id="stAlive">—</span></div>
-    <div class="kv"><span>You</span><span id="stId">—</span></div>
-    <div class="kv"><span>Partner</span><span id="stPeer">—</span></div>
+
+    <span class="label spaced">Lobby</span>
+    <div class="kv"><span>Current lobby</span><span id="stRoom">—</span></div>
 
     <span class="label spaced">Privacy</span>
-    <div class="kv"><span>Voice</span><span>P2P, DTLS-SRTP encrypted</span></div>
-    <div class="kv"><span>Video</span><span>Disabled (audio only)</span></div>
-    <div class="kv"><span>Server</span><span>Public MQTT relay (no account)</span></div>
-    <div class="kv"><span>Saved</span><span>Name, avatar, gender (local only)</span></div>
+    <div class="kv"><span>Voice</span><span>Peer-to-peer, encrypted</span></div>
 
     <button class="btn btn-ghost spaced-top" id="changeRoomBtn" type="button">Change lobby</button>
     <button class="btn btn-ghost" id="clearDataBtn" type="button">Reset profile</button>
@@ -1281,7 +1274,7 @@
           <div class="a-sec-head">
             <div>
               <h2 class="a-sec-title">Channel link</h2>
-              <p class="a-sec-sub">Shown on the home screen as "Join our Channel".</p>
+              <p class="a-sec-sub">Shown on the home screen as "Broadcast Channel".</p>
             </div>
           </div>
           <div class="set-row">
@@ -1437,6 +1430,13 @@
   </div>
 </div>
 
+<!-- The remote-audio sink lives at BODY level, deliberately outside every
+     .screen. A media element inside a display:none subtree is not allowed to
+     play, and the call screen is hidden during the "Next person" transition —
+     exactly when the new stream is bound. Keeping it here means the sink is
+     always renderable. Positioned off-view and 1px so it is never visible. -->
+<audio id="remoteAudio" autoplay playsinline></audio>
+
 <div id="toast" role="status" aria-live="polite"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/mqtt@5.16.1/dist/mqtt.min.js" crossorigin="anonymous"></script>
@@ -1494,7 +1494,7 @@
     lobby: CONFIG.LOBBY,
     broker: CONFIG.BROKER,
     ice: CONFIG.ICE.slice(),
-    filter: null,                 // null | 'male' | 'female'
+    filter: null,                 // null | 'male' | 'female' | 'other'
     searching: false,
     waitingSince: 0,              // when we last found nobody to ring
     resumeSearch: false,          // search interrupted by the OS, not the user
@@ -1548,6 +1548,38 @@
     return s ? s.charAt(0).toUpperCase() : '?';
   }
 
+  /* ----------------------------------------------------------- avatars
+     Avatars are drawn, not typed. Older profile records stored an emoji in
+     state.me.avatar; those are mapped onto the nearest new disc so nobody ends
+     up with a stray emoji on their call screen after this change. */
+  var AVATAR_KEYS = ['a1', 'a2', 'a3', 'a4', 'a5', 'a6'];
+  var AVATAR_LEGACY = { '🙂': 'a1', '😎': 'a2', '🌸': 'a2', '🎧': 'a5' };
+
+  function normalizeAvatar(value) {
+    var v = String(value || '');
+    if (AVATAR_KEYS.indexOf(v) !== -1) return v;
+    if (AVATAR_LEGACY[v]) return AVATAR_LEGACY[v];
+    /* Anything else (including an empty value) gets a stable disc derived from
+       the string, so the same person keeps the same colour between calls. */
+    var sum = 0;
+    for (var i = 0; i < v.length; i++) sum += v.charCodeAt(i);
+    return AVATAR_KEYS[sum % AVATAR_KEYS.length];
+  }
+
+  /* Fill an element with the disc art + monogram for an avatar key. */
+  function paintAvatar(el, avatarValue, name) {
+    if (!el) return;
+    var key = normalizeAvatar(avatarValue);
+    el.setAttribute('data-avatar', key);
+    var txt = el.querySelector('.av-txt');
+    if (!txt) {
+      txt = document.createElement('span');
+      txt.className = 'av-txt';
+      el.appendChild(txt);
+    }
+    txt.textContent = initialOf(name);
+  }
+
   var toastTimer = null;
   function toast(message, bad) {
     var el = $('toast');
@@ -1560,7 +1592,10 @@
   }
 
   function showScreen(name) {
-    ['onboard', 'home', 'call', 'ended'].forEach(function (id) {
+    /* 'admin' MUST be in this list. Every screen is display:none until it gets
+       .active, so leaving admin out kept /admin permanently invisible while the
+       login form and its event handlers quietly existed behind a blank page. */
+    ['onboard', 'home', 'call', 'ended', 'admin'].forEach(function (id) {
       var el = $(id);
       if (el) el.classList.toggle('active', id === name);
     });
@@ -2246,7 +2281,7 @@
       id: msg.id,
       tid: msg.tid || '',   /* backend id of this peer, used when reporting them */
       name: msg.name || 'Stranger',
-      avatar: msg.avatar || '🙂',
+      avatar: normalizeAvatar(msg.avatar),
       gender: msg.gender || null,
       want: msg.want || null,
       free: !!msg.free,
@@ -2426,7 +2461,6 @@
       case 'answer': onAnswer(msg); break;
       case 'ice': onIce(msg); break;
       case 'bye': onBye(msg); break;
-      case 'chat': onChat(msg); break;
       default: break;
     }
   }
@@ -2652,14 +2686,28 @@
 
     pc.ontrack = function (event) {
       if (state.call !== call) return;
-      var shared = event.streams && event.streams[0];
-      if (shared) {
-        if (shared !== call.remoteStream) { call.remoteStream = shared; bindRemoteAudio(shared); }
-        return;
-      }
+      /* Bind audio through OUR OWN MediaStream instead of the one the browser
+         reports in event.streams.
+
+         On Chrome/Android WebView the stream object in event.streams can be a
+         placeholder that the element accepts but never actually plays, which is
+         exactly the "call connects, no sound" symptom. An explicit
+         addTrack()'d stream is always playable, so prefer it and fall back to
+         the shared one only if it already exists. */
       if (!call.remoteStream) call.remoteStream = new MediaStream();
-      var exists = call.remoteStream.getTracks().some(function (t) { return t.id === event.track.id; });
+      var exists = call.remoteStream.getTracks().some(function (t) {
+        return t.id === event.track.id;
+      });
       if (!exists) call.remoteStream.addTrack(event.track);
+
+      /* A remote audio track can arrive muted and only unmute once media flows.
+         Re-binding on unmute is what makes sound appear on some devices. */
+      if (event.track && event.track.kind === 'audio') {
+        event.track.addEventListener('unmute', function () {
+          if (state.call === call) bindRemoteAudio(call.remoteStream);
+        });
+      }
+
       bindRemoteAudio(call.remoteStream);
     };
 
@@ -2674,6 +2722,10 @@
         state.timers.accept = null;
         setBadge('Live', true);
         setPeerStatus('Connected');
+        /* Media can start flowing only once the transport is up. If ontrack
+           already gave us a stream, re-bind now so playback begins at the
+           moment there is actually something to play. */
+        if (call.remoteStream) bindRemoteAudio(call.remoteStream);
         renderCall();
         // Warn once, and only when the browser refused AEC — the usual cause of
         // hearing yourself back. Headphones solve it without any code.
@@ -2883,7 +2935,7 @@
 
   function bindRemoteAudio(stream) {
     var audio = $('remoteAudio');
-    if (!audio) return;
+    if (!audio || !stream) return;
     /* The stream can be rebound (ontrack fires once per track), so guard against
        reloading the same source and restarting playback from zero. */
     if (audio.srcObject !== stream) audio.srcObject = stream;
@@ -2897,8 +2949,48 @@
     audio.playbackRate = 1;
 
     setPeerStatus('Connected');
+
+    /* Autoplay can be refused when the track arrives after the click that
+       started the call (Telegram's WebView is stricter than a browser tab).
+       play() resolves when audio really starts; until then keep the element
+       paused and retry from the next user gesture, otherwise the call looks
+       connected and stays silent forever. */
     var p = audio.play();
-    if (p && p.catch) p.catch(function () { /* needs a user gesture */ });
+    if (p && p.catch) {
+      p.then(function () {
+        audio.dataset.needsGesture = '';
+      }).catch(function () {
+        audio.dataset.needsGesture = '1';
+        armAudioGestureRetry();
+      });
+    }
+  }
+
+  /* One-shot "unmute on the next tap" retry. Removing itself on success keeps
+     it from stacking up if ontrack fires several times per call. */
+  function armAudioGestureRetry() {
+    var audio = $('remoteAudio');
+    if (!audio) return;
+    if (audio.dataset.retryArmed === '1') return;
+    audio.dataset.retryArmed = '1';
+
+    var retry = function () {
+      if (!audio.dataset.needsGesture) {
+        document.removeEventListener('pointerdown', retry, true);
+        audio.dataset.retryArmed = '';
+        return;
+      }
+      var p = audio.play();
+      if (p && p.then) {
+        p.then(function () {
+          audio.dataset.needsGesture = '';
+          audio.dataset.retryArmed = '';
+          setPeerStatus('Connected');
+          document.removeEventListener('pointerdown', retry, true);
+        }).catch(function () { /* still blocked; the next tap tries again */ });
+      }
+    };
+    document.addEventListener('pointerdown', retry, true);
   }
 
   // ============================================================== teardown
@@ -2946,9 +3038,12 @@
     if (call.peerId) state.recent[call.peerId] = now();
 
     var audio = $('remoteAudio');
-    if (audio) { audio.pause(); audio.srcObject = null; }
-    $('chatLog').innerHTML = '';
-    $('chatPanel').classList.remove('open');
+    if (audio) {
+      audio.pause();
+      audio.srcObject = null;
+      audio.dataset.needsGesture = '';
+      audio.dataset.retryArmed = '';
+    }
 
     $('endedTime').textContent = fmtClock(seconds);
     $('endedReason').textContent = reason || 'Call ended.';
@@ -3059,37 +3154,6 @@
     }
   }
 
-  // ================================================================== chat
-  function onChat(msg) {
-    if (!msg.text) return;
-    if (!state.call || msg.callId !== state.call.callId) return;
-    appendBubble(String(msg.text).slice(0, 300), false);
-    $('chatPanel').classList.add('open');
-  }
-
-  function appendBubble(text, mine) {
-    var log = $('chatLog');
-    if (!log) return;
-    var bubble = document.createElement('div');
-    bubble.className = 'bubble' + (mine ? ' mine' : '');
-    bubble.textContent = text;
-    log.appendChild(bubble);
-    log.scrollTop = log.scrollHeight;
-  }
-
-  function sendChat() {
-    var input = $('chatInput');
-    var text = (input.value || '').trim();
-    var call = state.call;
-    if (!text) return;
-    if (!call) { toast('You need an active call to chat'); return; }
-    publish(tInbox(call.peerId), {
-      v: 2, t: 'chat', to: call.peerId, callId: call.callId, from: state.me.id, text: text.slice(0, 300)
-    });
-    appendBubble(text.slice(0, 300), true);
-    input.value = '';
-  }
-
   // ================================================================ renders
   function renderOnline() {
     var n = freePeers().filter(function (p) { return p.hits >= 2; }).length;
@@ -3153,7 +3217,7 @@
     }
   }
 
-  /* The "Join our Channel" button. Shown only when a channel link is configured
+  /* The "Broadcast Channel" button. Shown only when a channel link is configured
      (admin panel → Settings), and only when it is a safe http(s)/t.me URL. */
   function renderChannelButton() {
     var btn = $('channelBtn');
@@ -3207,10 +3271,9 @@
 
   function setPeerInfo(partner) {
     var name = (partner && partner.name) || 'Stranger';
-    var avatar = (partner && partner.avatar) || initialOf(name);
     $('peerName').textContent = name;
     $('peerNameBig').textContent = name;
-    $('peerAvatar').textContent = avatar;
+    paintAvatar($('peerAvatar'), partner && partner.avatar, name);
   }
 
   function setPeerStatus(text) {
@@ -3226,29 +3289,47 @@
   }
 
   function renderSettings() {
+    $('stName').textContent = state.me ? (state.me.name || 'Guest') : '—';
+    $('stGender').textContent = genderLabel(state.me ? state.me.gender : null);
     $('stStatus').textContent = state.ready ? 'Connected' : 'Offline';
     $('stRoom').textContent = lobbySlug();
-    $('stBroker').textContent = String(state.broker).replace(/^wss?:\/\//, '');
-    var livePeers = freePeers().filter(function (p) { return p.hits >= 2; });
-    $('stAlive').textContent = livePeers.length + ' free / ' + Object.keys(state.peers).length + ' total';
-    $('stId').textContent = state.me ? state.me.id.slice(0, 10) + '…' : '—';
-    $('stPeer').textContent = state.call ? (state.call.partner.name || 'Stranger') : 'Not in a call';
+  }
+
+  function genderLabel(g) {
+    if (g === 'male') return 'Male';
+    if (g === 'female') return 'Female';
+    if (g === 'other') return 'Other';
+    return 'Not set';
   }
 
   function syncSelfCard() {
     $('nick').value = state.me ? state.me.name : '';
+    var mine = normalizeAvatar(state.me ? state.me.avatar : '');
+    paintAvatarRow();
     Array.prototype.forEach.call($('avatarRow').children, function (btn) {
-      btn.setAttribute('aria-pressed', String(!!state.me && btn.getAttribute('data-avatar') === state.me.avatar));
+      btn.setAttribute('aria-pressed', String(!!state.me && btn.getAttribute('data-avatar') === mine));
     });
     Array.prototype.forEach.call($('genderPick').children, function (btn) {
       btn.setAttribute('aria-pressed', String(!!state.me && btn.getAttribute('data-g') === state.me.gender));
     });
   }
 
+  /* Every disc shows the same monogram — the user's initial — so the choice is
+     about colour, not about which letter you get. Re-run whenever the nickname
+     changes so the preview never goes stale. */
+  function paintAvatarRow() {
+    var row = $('avatarRow');
+    if (!row) return;
+    var name = ($('nick').value || '').trim() || 'Guest';
+    Array.prototype.forEach.call(row.children, function (btn) {
+      paintAvatar(btn, btn.getAttribute('data-avatar'), name);
+    });
+  }
+
   // ================================================================ actions
   function selectAvatar(avatar) {
     if (!state.me) return;
-    state.me.avatar = avatar;
+    state.me.avatar = normalizeAvatar(avatar);
     saveStored();
     syncSelfCard();
     hello(false);
@@ -3277,7 +3358,7 @@
     state.me = {
       id: state.me ? state.me.id : uid(),
       name: name,
-      avatar: pressed ? pressed.getAttribute('data-avatar') : '🙂',
+      avatar: pressed ? normalizeAvatar(pressed.getAttribute('data-avatar')) : 'a1',
       gender: genderBtn ? genderBtn.getAttribute('data-g') : null
     };
     saveStored();
@@ -4059,12 +4140,14 @@
   function genderPill(g) {
     if (g === 'male') return '<span class="pill male">M</span>';
     if (g === 'female') return '<span class="pill female">F</span>';
+    if (g === 'other') return '<span class="pill other">O</span>';
     return '<span class="pill mute">—</span>';
   }
 
   function filterText(f) {
     if (f === 'male') return 'Male';
     if (f === 'female') return 'Female';
+    if (f === 'other') return 'Other';
     return 'Anyone';
   }
 
@@ -4205,6 +4288,8 @@
     $('nick').addEventListener('keydown', function (e) {
       if (e.key === 'Enter') startFromOnboarding();
     });
+    // Keep the avatar monograms showing the user's initial as they type.
+    $('nick').addEventListener('input', paintAvatarRow);
 
     $('avatarRow').addEventListener('click', function (e) {
       var btn = e.target.closest('[data-avatar]');
@@ -4260,13 +4345,6 @@
     $('nextBtn').addEventListener('click', nextPerson);
     $('micBtn').addEventListener('click', toggleMic);
     $('speakerBtn').addEventListener('click', toggleSpeaker);
-    $('chatBtn').addEventListener('click', function () {
-      var panel = $('chatPanel');
-      panel.classList.toggle('open');
-      if (panel.classList.contains('open')) $('chatInput').focus();
-    });
-    $('chatSend').addEventListener('click', sendChat);
-    $('chatInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') sendChat(); });
 
     $('reportBtn').addEventListener('click', openReportSheet);
     $('reportSend').addEventListener('click', submitReport);
@@ -4343,6 +4421,11 @@
     loadConfig();
     loadAccess();
 
+    /* Draw the avatar discs before anything else can show the onboarding card.
+       They start empty in the markup, so without this they render as six blank
+       circles until the user types a name. */
+    paintAvatarRow();
+
     var supported = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.RTCPeerConnection);
     if (!supported) {
       $('onboardError').textContent = 'This browser does not support audio calls. Please use a recent version of Chrome or Safari. Note: the page must be served over HTTPS.';
@@ -4358,7 +4441,7 @@
       state.me = {
         id: uid(),
         name: stored.name,
-        avatar: stored.avatar || '🙂',
+        avatar: normalizeAvatar(stored.avatar),
         gender: stored.gender || null
       };
       syncSelfCard();
@@ -4369,7 +4452,7 @@
       if (urlLobby) toast('Lobby: ' + urlLobby);
     } else {
       state.lobby = urlLobby || CONFIG.LOBBY;
-      state.me = { id: uid(), name: 'Guest', avatar: '🙂', gender: null };
+      state.me = { id: uid(), name: 'Guest', avatar: 'a1', gender: null };
       syncSelfCard();
       showScreen('onboard');
     }
